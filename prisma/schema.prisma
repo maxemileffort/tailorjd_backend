@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String         @id @default(uuid())
+  email            String         @unique
+  passwordHash     String
+  isSubscribed     Boolean        @default(false)
+  isAdmin          Boolean        @default(false)
+  creditBalance    Int            @default(0)
+  stripeCustomerId String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  resumes          Resume[]
+  credits          Credit[]
+  ActivityLog      ActivityLog[]
+  Demographics     Demographics[]
+}
+
+model Demographics {
+  id              String  @id @default(uuid())
+  userId          String
+  f_name          String?
+  l_name          String?
+  jd_target       String?
+  currentIndustry String?
+  user            User    @relation(fields: [userId], references: [id])
+}
+
+model Resume {
+  id             String   @id @default(uuid())
+  userId         String
+  jobDescription String
+  currentResume  String
+  rewriteContent Json
+  coverLetter    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Credit {
+  id              String   @id @default(uuid())
+  userId          String
+  amount          Int
+  type            String
+  stripeProductId String?
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model StripeProduct {
+  id              String   @id @default(uuid())
+  name            String
+  price           Float
+  stripeProductId String
+  createdAt       DateTime @default(now())
+}
+
+model ActivityLog {
+  id           String       @id @default(uuid())
+  userId       String?
+  action       String
+  activityType activityType @default(LOG)
+  details      Json?
+  createdAt    DateTime     @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+}
+
+enum activityType {
+  LOG
+  ERROR
+  WARNING
+}

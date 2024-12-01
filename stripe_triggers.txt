@@ -1,0 +1,13 @@
+stripe trigger charge.dispute.created
+stripe trigger charge.refunded
+stripe trigger charge.succeeded
+stripe trigger checkout.session.completed
+stripe trigger customer.subscription.created
+stripe trigger customer.subscription.deleted
+stripe trigger customer.subscription.updated
+stripe trigger invoice.payment_failed
+stripe trigger invoice.payment_succeeded
+stripe trigger invoice.upcoming
+stripe trigger payment_intent.payment_failed
+stripe trigger payment_intent.succeeded
+stripe trigger payment_method.attached
