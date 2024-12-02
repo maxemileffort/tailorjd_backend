@@ -17,7 +17,7 @@ model User {
   stripeCustomerId String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
-  resumes          Resume[]
+  docs             Docs[]
   credits          Credit[]
   ActivityLog      ActivityLog[]
   Demographics     Demographics[]
@@ -33,17 +33,28 @@ model Demographics {
   user            User    @relation(fields: [userId], references: [id])
 }
 
-model Resume {
+model Docs {
   id             String   @id @default(uuid())
   userId         String
-  jobDescription String
-  currentResume  String
-  rewriteContent Json
-  coverLetter    String?
+  docType        DocType
+  content        String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  collectionId   String  
+  collection     DocCollection @relation(fields: [collectionId], references: [id])
 
   user User @relation(fields: [userId], references: [id])
+}
+
+model DocCollection {
+  id             String   @id @default(uuid())
+  analysis       String
+  userResume     String
+  resumeRewrite  String
+  coverLetter    String
+  jd             String
+
+  docs           Docs[] 
 }
 
 model Credit {
@@ -80,4 +91,12 @@ enum activityType {
   LOG
   ERROR
   WARNING
+}
+
+enum DocType {
+  ANALYSIS
+  USER_RESUME
+  REWRITE_RESUME
+  COVER_LETTER
+  JD
 }

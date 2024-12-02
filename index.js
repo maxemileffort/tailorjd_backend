@@ -7,6 +7,7 @@ const { PrismaClient } = require('@prisma/client');
 
 const authRoutes = require('./routes/auth'); // To handle authentication-related routes
 const userRoutes = require('./routes/user'); // To handle CRUD operations for users
+const rewriteRoutes = require('./routes/rewrites'); // Business Logic
 const subscriptionRoutes = require('./routes/subscription'); // Handles upgrades from free to subscribed
 const webhookRoutes = require('./routes/webhooks'); // Only for signing Stripe transactions
 
@@ -31,6 +32,7 @@ app.use(express.json()); // Rest of routes expect json
 app.use('/api/auth', authRoutes); // Authentication-related routes
 app.use('/api/users', userRoutes); // CRUD operations for users
 app.use('/api/subscription', subscriptionRoutes); // Strictly for upgrades and downgrades
+app.use('/api/rewrites', rewriteRoutes); // Handles processing of JDs and Resumes
 
 // Error handling middleware
 app.use((err, req, res, next) => {
