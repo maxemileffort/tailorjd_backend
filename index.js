@@ -10,6 +10,8 @@ const userRoutes = require('./routes/user'); // To handle CRUD operations for us
 const rewriteRoutes = require('./routes/rewrites'); // Business Logic
 const subscriptionRoutes = require('./routes/subscription'); // Handles upgrades from free to subscribed
 const webhookRoutes = require('./routes/webhooks'); // Only for signing Stripe transactions
+const creditsRoutes = require('./routes/credits'); // Only monitors credit balances; no logic for money handling
+const sanitizeInput = require('./middleware/sanitizeInput');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -25,14 +27,17 @@ app.use(rateLimit({
 }));
 
 // Routes
+// This route doesn't use sql and needs to be raw.
 app.use('/api/webhooks', webhookRoutes); // Stripe transaction signing; expects raw body
 
 app.use(express.json()); // Rest of routes expect json
+app.use(sanitizeInput); // Many of these have tables, so we sanitize their inputs
 
 app.use('/api/auth', authRoutes); // Authentication-related routes
 app.use('/api/users', userRoutes); // CRUD operations for users
 app.use('/api/subscription', subscriptionRoutes); // Strictly for upgrades and downgrades
 app.use('/api/rewrites', rewriteRoutes); // Handles processing of JDs and Resumes
+app.use('/api/credits', creditsRoutes); // Handles credits logic
 
 // Error handling middleware
 app.use((err, req, res, next) => {

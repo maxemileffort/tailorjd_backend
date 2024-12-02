@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { app } = require('../index'); // Ensure your Express app is exported in index.js
+const { app } = require('../index'); 
 
 const prisma = new PrismaClient();
 

@@ -3,6 +3,8 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const rewritesRouter = require('../routes/rewrites');
 
+const prisma = new PrismaClient();
+
 jest.mock('node-fetch', () => jest.fn());
 const fetch = require('node-fetch');
 
@@ -43,6 +45,27 @@ describe('Rewrites Router', () => {
     process.env.ANALYSIS_PROMPT = 'Mock analysis prompt';
     process.env.COMPARE_PROMPT = 'Mock compare prompt';
     process.env.COVERLETTER_PROMPT = 'Mock cover letter prompt';
+  });
+
+  afterAll(async () => {
+    // Delete all mock cases
+    await prisma.docs.deleteMany({
+      where: {
+        id: {
+          contains: 'mock',
+        },
+      },
+    });
+
+    await prisma.docCollection.deleteMany({
+      where: {
+        id: {
+          contains: 'mock',
+        },
+      },
+    });
+  
+    await prisma.$disconnect(); // Close the database connection
   });
 
   const validPayload = {
