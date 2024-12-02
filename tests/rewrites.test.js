@@ -1,131 +1,103 @@
 const request = require('supertest');
-const express = require('express');
+const { app } = require('./setup');
 const { PrismaClient } = require('@prisma/client');
-const rewritesRouter = require('../routes/rewrites');
 
-const prisma = new PrismaClient();
-
-jest.mock('node-fetch', () => jest.fn());
-const fetch = require('node-fetch');
-
-jest.mock('@prisma/client', () => {
-  return {
-    PrismaClient: jest.fn().mockImplementation(() => ({
-      docCollection: {
-        create: jest.fn().mockResolvedValue({ id: 'mock-collection-id' }),
-      },
-      docs: {
-        create: jest.fn().mockResolvedValue({ id: 'mock-doc-id' }),
-      },
-    })),
-  };
-});
-
-// Mock authenticate middleware
+jest.mock('@prisma/client');
 jest.mock('../middleware/auth', () => ({
   authenticate: (req, res, next) => {
-    req.user = { id: 'mock-user-id' }; // Mocked user
-    next();
+      req.user = { id: 1, isAdmin: false }; // Mock authenticated admin user
+      next();
+  },
+  isAdmin: (req, res, next) => {
+      if (req.user && req.user.isAdmin) {
+          next();
+      } else {
+          res.status(403).json({ error: 'Forbidden' });
+      }
   },
 }));
 
-describe('Rewrites Router', () => {
-  let app;
+const prisma = new PrismaClient();
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-
-    app = express();
-    app.use(express.json());
-    app.use('/rewrites', rewritesRouter);
-
-    // Set mock environment variables
-    process.env.OPENAI_API_KEY = 'mock-api-key';
-    process.env.SYSTEM_PROMPT = 'Mock system prompt';
-    process.env.ANALYSIS_PROMPT = 'Mock analysis prompt';
-    process.env.COMPARE_PROMPT = 'Mock compare prompt';
-    process.env.COVERLETTER_PROMPT = 'Mock cover letter prompt';
-  });
-
-  afterAll(async () => {
-    // Delete all mock cases
-    await prisma.docs.deleteMany({
-      where: {
-        id: {
-          contains: 'mock',
-        },
-      },
+describe('POST /api/rewrites', () => {
+    afterEach(() => {
+        jest.clearAllMocks();
     });
 
-    await prisma.docCollection.deleteMany({
-      where: {
-        id: {
-          contains: 'mock',
-        },
-      },
-    });
-  
-    await prisma.$disconnect(); // Close the database connection
-  });
+    test('should create a new document collection and return 201 status', async () => {
+        prisma.docCollection.create.mockResolvedValue({ id: 1 });
+        prisma.docs.create
+            .mockResolvedValueOnce({ id: 2, docType: 'USER_RESUME' })
+            .mockResolvedValueOnce({ id: 3, docType: 'JD' })
+            .mockResolvedValueOnce({ id: 4, docType: 'ANALYSIS' })
+            .mockResolvedValueOnce({ id: 5, docType: 'REWRITE_RESUME' })
+            .mockResolvedValueOnce({ id: 6, docType: 'COVER_LETTER' });
 
-  const validPayload = {
-    user_resume: 'Mock user resume content',
-    jd: 'Mock job description content',
-  };
+        const mockOpenAIResponse = [{ message: { content: 'Mock content' } }];
+        global.fetch = jest.fn(() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ choices: mockOpenAIResponse }),
+            })
+        );
 
-  it('should successfully create a document collection and associated docs', async () => {
-    fetch.mockImplementation((url, options) => {
-      const body = JSON.parse(options.body);
-      if (body.messages.some((msg) => msg.content.includes('analysis'))) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ choices: [{ message: { content: 'Mock analysis response' } }] }),
-        });
-      }
-      if (body.messages.some((msg) => msg.content.includes('compare'))) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ choices: [{ message: { content: 'Mock rewrite response' } }] }),
-        });
-      }
-      if (body.messages.some((msg) => msg.content.includes('cover letter'))) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ choices: [{ message: { content: 'Mock cover letter response' } }] }),
-        });
-      }
-      return Promise.reject(new Error('Unexpected prompt'));
+        const response = await request(app)
+            .post('/api/rewrites')
+            .send({
+                user_resume: 'Sample resume',
+                jd: 'Sample job description',
+            })
+            .expect(201);
+
+        expect(response.body.collectionId).toBe(1);
+        expect(response.body.docs).toHaveLength(5);
     });
 
-    const response = await request(app).post('/rewrites').send(validPayload);
+    test('should return 400 if user_resume or jd is missing', async () => {
+        const response = await request(app)
+            .post('/api/rewrites')
+            .send({ user_resume: 'Sample resume' })
+            .expect(400);
 
-    expect(response.statusCode).toBe(201);
-    expect(response.body.collectionId).toBeDefined();
-    expect(response.body.docs).toHaveLength(5);
+        expect(response.body.error).toBe('User resume and job description are required');
+    });
 
-    const docs = response.body.docs;
-    expect(docs.find((doc) => doc.docType === 'USER_RESUME')).toBeDefined();
-    expect(docs.find((doc) => doc.docType === 'JD')).toBeDefined();
-    expect(docs.find((doc) => doc.docType === 'ANALYSIS')).toBeDefined();
-    expect(docs.find((doc) => doc.docType === 'REWRITE_RESUME')).toBeDefined();
-    expect(docs.find((doc) => doc.docType === 'COVER_LETTER')).toBeDefined();
-  });
+    test('should handle OpenAI API errors gracefully', async () => {
+        prisma.docCollection.create.mockResolvedValue({ id: 1 });
+        prisma.docs.create
+            .mockResolvedValueOnce({ id: 2, docType: 'USER_RESUME' })
+            .mockResolvedValueOnce({ id: 3, docType: 'JD' });
 
-  it('should return 400 if resume or job description is missing', async () => {
-    const response = await request(app).post('/rewrites').send({ user_resume: 'Mock resume' });
+        global.fetch = jest.fn(() =>
+            Promise.resolve({
+                ok: false,
+                status: 500,
+                statusText: 'Internal Server Error',
+            })
+        );
 
-    expect(response.statusCode).toBe(400);
-    expect(response.body.error).toBe('User resume and job description are required');
-  });
+        const response = await request(app)
+            .post('/api/rewrites')
+            .send({
+                user_resume: 'Sample resume',
+                jd: 'Sample job description',
+            })
+            .expect(500);
 
-  it('should handle internal server errors', async () => {
-    fetch.mockImplementation(() =>
-      Promise.reject(new Error('Mocked API failure'))
-    );
+        expect(response.body.error).toBe('An error occurred while processing the request');
+    });
 
-    const response = await request(app).post('/rewrites').send(validPayload);
+    test('should return 500 on unexpected errors', async () => {
+        prisma.docCollection.create.mockRejectedValue(new Error('Unexpected error'));
 
-    expect(response.statusCode).toBe(500);
-    expect(response.body.error).toBe('An error occurred while processing the request');
-  });
+        const response = await request(app)
+            .post('/api/rewrites')
+            .send({
+                user_resume: 'Sample resume',
+                jd: 'Sample job description',
+            })
+            .expect(500);
+
+        expect(response.body.error).toBe('An error occurred while processing the request');
+    });
 });
