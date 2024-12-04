@@ -20,6 +20,7 @@ model User {
   docs             Docs[]
   ActivityLog      ActivityLog[]
   Demographics     Demographics[]
+  Sessions         Sessions[]
 }
 
 model Demographics {
@@ -65,6 +66,16 @@ model ActivityLog {
   createdAt    DateTime     @default(now())
 
   user User? @relation(fields: [userId], references: [id])
+}
+
+model Sessions {
+  id          String        @id @default(uuid())
+  createdOn   DateTime      @default(now())
+  expiry      DateTime 
+  token       String
+  userId      String
+
+  user User @relation(fields: [userId], references: [id])
 }
 
 enum activityType {
