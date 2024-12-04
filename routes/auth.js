@@ -83,25 +83,30 @@ router.post('/request-reset', async (req, res) => {
 
   const mailOptions = {
     to: email,
-    subject: 'Password Reset',
+    from: "TailorJD",
+    subject: 'TailorJD - Password Reset',
     text: `Click this link to reset your password: ${process.env.FRONTEND_URL}/reset/${token}`,
   };
 
   transporter.sendMail(mailOptions, (error, info) => {
     if (error) return res.status(500).send(error.toString());
-    res.send('Password reset link sent to your email.');
+    res.send('Password reset link sent to your email. You should receive it in the next 5-10 minutes.');
   });
 });
 
 // Reset Password
 router.post('/reset/:token', async (req, res) => {
   const { token } = req.params;
-  const { newPassword } = req.body;
+  const { password } = req.body;
+
+  // console.log('New Password:', password); // Debugging log
 
   let userId;
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
+    // console.log(`payload: ${payload}`)
     userId = payload.userId;
+    // console.log(`userId: ${userId}`)
   } catch (err) {
     return res.status(400).send('Invalid or expired token.');
   }
@@ -111,12 +116,12 @@ router.post('/reset/:token', async (req, res) => {
     return res.status(400).send('Invalid or expired token.');
   }
 
-  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  const hashedPassword = await bcrypt.hash(password, 10);
 
   await prisma.user.update({
     where: { id: userId },
     data: {
-      password: hashedPassword,
+      passwordHash: hashedPassword,
       resetToken: null, // Clear the reset token
       resetTokenExpiry: null, // Clear the expiry
     },
