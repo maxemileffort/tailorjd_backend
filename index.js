@@ -20,7 +20,36 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+
+// Check if production environment variable is set
+const isProd = process.env.PROD === 'true';
+
+if (isProd) {
+  // Production-specific CORS configuration
+  const allowedOrigins = [
+    'https://example.com',
+    'https://another-example.com',
+    'https://yetanother-example.com',
+    'http://192.168.1.1', // Example IP address
+    'http://192.168.1.2', // Another IP address
+    'http://192.168.1.3'  // Yet another IP address
+  ];
+
+  app.use(cors({
+    origin: function(origin, callback) {
+      // Allow requests with no origin (like mobile apps, curl requests)
+      if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  }));
+} else {
+  // Development/Generic CORS configuration
+  app.use(cors()); // Allow all origins
+}
+
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs

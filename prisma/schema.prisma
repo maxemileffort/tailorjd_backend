@@ -8,19 +8,21 @@ datasource db {
 }
 
 model User {
-  id               String         @id @default(uuid())
-  email            String         @unique
-  passwordHash     String
-  isSubscribed     Boolean        @default(false)
-  isAdmin          Boolean        @default(false)
-  creditBalance    Int            @default(0)
-  stripeCustomerId String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  docs             Docs[]
-  ActivityLog      ActivityLog[]
-  Demographics     Demographics[]
-  Sessions         Sessions[]
+  id                String         @id @default(uuid())
+  email             String         @unique
+  passwordHash      String
+  isSubscribed      Boolean        @default(false)
+  isAdmin           Boolean        @default(false)
+  creditBalance     Int            @default(5)
+  stripeCustomerId  String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  resetToken        String? 
+  resetTokenExpiry  DateTime?
+  docs              Docs[]
+  ActivityLog       ActivityLog[]
+  Demographics      Demographics[]
+  Sessions          Sessions[]
 }
 
 model Demographics {

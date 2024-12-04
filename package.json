@@ -23,6 +23,7 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "node-fetch": "^3.3.2",
+    "nodemailer": "^6.9.16",
     "openai": "^4.73.1",
     "pdf-parse": "^1.1.1",
     "stripe": "^17.4.0"
