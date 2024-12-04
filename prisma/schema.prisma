@@ -73,6 +73,7 @@ model Sessions {
   createdOn   DateTime      @default(now())
   expiry      DateTime 
   token       String
+  isActive    Boolean       @default(true)
   userId      String
 
   user User @relation(fields: [userId], references: [id])

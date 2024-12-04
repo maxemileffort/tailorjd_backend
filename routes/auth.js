@@ -36,6 +36,16 @@ router.post('/login', async (req, res) => {
       { expiresIn: '1h' }
     );
 
+    const session = await prisma.sessions.create({
+      data: {
+        userId: newUser.id,
+        token: token,
+        createdOn: new Date(),
+        expiry: new Date(Date.now() + 3600000), // Token will expire in 1 hour
+        isActive: true
+      }
+    });
+    
     res.json({ token });
   } catch (err) {
     console.error(err);

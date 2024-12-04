@@ -46,7 +46,14 @@ router.post('/', async (req, res) => {
       data: { email, passwordHash: hashedPassword }, // Store hashed password
     });
 
-    res.status(201).json(newUser);
+    // Generate a JWT token
+    const token = jwt.sign(
+      { id: newUser.id, email: newUser.email, isAdmin: newUser.isAdmin },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    res.status(201).json({ token });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to create user' });
