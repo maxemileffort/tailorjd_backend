@@ -40,6 +40,7 @@ async function callOpenAI(apiKey, model, messages) {
 }
 
 router.post('/', authenticate, async (req, res) => {
+    console.log('received request')
     const { user_resume, jd } = req.body;
     
     if (!user_resume || !jd) {
@@ -173,5 +174,26 @@ router.post('/', authenticate, async (req, res) => {
         res.status(500).json({ error: 'An error occurred while processing the request' });
     }
 });
+
+router.get('/doc-collections', authenticate, async (req, res) => {
+    try {
+      const collections = await prisma.docCollection.findMany({
+        where: {
+          docs: {
+            some: {
+              userId: req.user.id,
+            },
+          },
+        },
+        include: {
+          docs: true,
+        },
+      });
+      res.json({ collections });
+    } catch (error) {
+      console.error('Error fetching collections:', error);
+      res.status(500).json({ error: 'An error occurred while fetching collections.' });
+    }
+  });
 
 module.exports = router;

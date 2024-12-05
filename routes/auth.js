@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const nodemailer = require('nodemailer');
+const { authenticate } = require('../middleware/auth'); 
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -52,6 +53,71 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to login' });
+  }
+});
+
+router.post('/token-check', authenticate, async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const userId = req.user.id; // Adjusted from req.user.userId
+  console.log('Token check:');
+  console.log('Token:', token, 'UserID:', userId);
+
+  try {
+    // Find the session by token
+    const session = await prisma.sessions.findUnique({
+      where: { token },
+    });
+
+    if (!session || !session.isActive) {
+      // Clear the session and log out user
+      console.log('session problem');
+      await prisma.sessions.update({
+        where: { token },
+        data: { isActive: false },
+      });
+      return res.status(401).json({ error: 'Session invalid. Please log in again.' });
+    }
+
+    // Check if token is expired
+    const now = new Date();
+    if (session.expiry < now) {
+      // Clear the session and log out user
+      console.log('session expired.');
+      await prisma.sessions.update({
+        where: { token },
+        data: { isActive: false },
+      });
+      return res.status(401).json({ error: 'Session expired. Please log in again.' });
+    }
+
+    // Refresh the token if it's close to expiry (e.g., less than 15 minutes left)
+    const timeLeft = session.expiry - now;
+    const fifteenMinutes = 15 * 60 * 1000;
+    if (timeLeft < fifteenMinutes) {
+      // Generate a new token
+      const newToken = jwt.sign({ userId }, process.env.JWT_SECRET, {
+        expiresIn: '1h',
+      });
+
+      // Update the session with new token and expiry
+      const newExpiry = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour from now
+      await prisma.sessions.update({
+        where: { token },
+        data: {
+          token: newToken,
+          expiry: newExpiry,
+        },
+      });
+
+      // Return the new token
+      return res.json({ token: newToken });
+    }
+
+    // Token is still good, return current token
+    res.json({ token });
+  } catch (err) {
+    console.error('Token check error:', err);
+    res.status(500).json({ error: 'Failed to check token.' });
   }
 });
 

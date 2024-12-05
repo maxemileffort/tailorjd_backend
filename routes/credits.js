@@ -108,4 +108,26 @@ router.post('/use-credits', async (req, res) => {
     }
 });
 
+
+// Endpoint for users to get credit balance
+router.get('/read-credits', async (req, res) => {
+    const { user } = req;
+    const userId = user.id;
+
+    if (!userId) {
+        return res.status(400).json({ message: 'User ID and amount are required' });
+    }
+
+    try {
+        // Fetch the user
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        
+        // Read user's credit balance
+        const creditBalance = user.creditBalance;
+
+        res.status(200).json({ creditBalance });
+    } catch (error) {
+        res.status(500).json({ message: 'Error finding credit credit balance:', error });
+    }
+});
 module.exports = router;

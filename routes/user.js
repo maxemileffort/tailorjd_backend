@@ -2,6 +2,7 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const { authenticate, isAdmin } = require('../middleware/auth');
+const jwt = require('jsonwebtoken');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -55,7 +56,11 @@ router.post('/', async (req, res) => {
 
     res.status(201).json({ token });
   } catch (err) {
-    console.error(err);
+    // console.error(err);
+    if(String(err).includes('Unique constraint failed on the fields: (`email`)')){
+      res.status(500).json({ error: 'Looks like that user exists already.' });  
+      return;
+    }
     res.status(500).json({ error: 'Failed to create user' });
   }
 });

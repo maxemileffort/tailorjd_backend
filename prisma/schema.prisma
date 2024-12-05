@@ -32,6 +32,7 @@ model Demographics {
   l_name          String?
   jd_target       String?
   currentIndustry String?
+  currentResume   String?
   user            User    @relation(fields: [userId], references: [id])
 }
 
@@ -50,10 +51,10 @@ model Docs {
 
 model DocCollection {
   id             String   @id @default(uuid())
-  analysis       String
+  analysis       String?
   userResume     String
-  resumeRewrite  String
-  coverLetter    String
+  resumeRewrite  String?
+  coverLetter    String?
   jd             String
 
   docs           Docs[] 
@@ -74,7 +75,7 @@ model Sessions {
   id          String        @id @default(uuid())
   createdOn   DateTime      @default(now())
   expiry      DateTime 
-  token       String
+  token       String        @unique
   isActive    Boolean       @default(true)
   userId      String
 
