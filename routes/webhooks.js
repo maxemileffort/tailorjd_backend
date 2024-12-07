@@ -1,6 +1,15 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
+let stripeKey;
+if(process.env.PROD==="true"){
+  stripeKey = (process.env.STRIPE_SECRET_KEY);
+} else {
+  stripeKey = (process.env.STRIPE_TEST_SECRET_KEY);
+}
+
+const stripe = require('stripe')(stripeKey);
+
 
 const router = express.Router();
 const prisma = new PrismaClient();

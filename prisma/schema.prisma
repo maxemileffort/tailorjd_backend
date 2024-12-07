@@ -50,12 +50,14 @@ model Docs {
 }
 
 model DocCollection {
-  id             String   @id @default(uuid())
-  analysis       String?
-  userResume     String
-  resumeRewrite  String?
-  coverLetter    String?
-  jd             String
+  id              String   @id @default(uuid())
+  analysis        String?
+  userResume      String
+  resumeRewrite   String?
+  coverLetter     String?
+  collectionName  String?
+  jd              String
+  createdAt       DateTime @default(now())
 
   docs           Docs[] 
 }

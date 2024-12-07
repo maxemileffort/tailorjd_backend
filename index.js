@@ -11,6 +11,9 @@ const rewriteRoutes = require('./routes/rewrites'); // Business Logic
 const subscriptionRoutes = require('./routes/subscription'); // Handles upgrades from free to subscribed
 const webhookRoutes = require('./routes/webhooks'); // Only for signing Stripe transactions
 const creditsRoutes = require('./routes/credits'); // Only monitors credit balances; no logic for money handling
+const createCheckoutSession = require('./routes/checkout'); // checkouts and sessions related to checkouts
+const contactRoutes = require('./routes/contact');
+
 const sanitizeInput = require('./middleware/sanitizeInput');
 
 const app = express();
@@ -67,6 +70,8 @@ app.use('/api/users', userRoutes); // CRUD operations for users
 app.use('/api/subscription', subscriptionRoutes); // Strictly for upgrades and downgrades
 app.use('/api/rewrites', rewriteRoutes); // Handles processing of JDs and Resumes
 app.use('/api/credits', creditsRoutes); // Handles credits logic
+app.use('/api/checkouts', createCheckoutSession); // only checkouts
+app.use('/api/contact', contactRoutes); // only checkouts
 
 // Error handling middleware
 app.use((err, req, res, next) => {
