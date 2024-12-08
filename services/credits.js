@@ -35,4 +35,32 @@ const updateUserCredits = async (userId, amount, operation) => {
     }
 };
 
-module.exports = { updateUserCredits };
+const fetchUserCredits = async (userId) => {
+    // This function retrieves the user's credit
+    // balance to determine if it's ok to use app functions.
+    if (!userId) {
+        throw new Error(
+            'Invalid parameters: userId must be defined.'
+        );
+    }
+
+    try {
+        // Fetch the user's credit balance
+        const userData = await prisma.user.findUnique({
+            where: { id: userId },
+        });
+
+        const creditBalance = userData.creditBalance;
+
+        if (!userData || !creditBalance) {
+            throw new Error(`Failed to fetch credits for userId: ${userId}`);
+        }
+        // console.log(`creditBalance: ${creditBalance}`)
+        return creditBalance; 
+    } catch (error) {
+        console.error(`Error fetching user credits:`, error);
+        throw new Error(`An error occurred while fetching user credits.`);
+    }
+};
+
+module.exports = { updateUserCredits, fetchUserCredits };

@@ -1,7 +1,7 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authenticate } = require('../middleware/auth'); 
-const { updateUserCredits } = require('../services/credits');
+const { updateUserCredits, fetchUserCredits } = require('../services/credits');
 
 // Example usage
 
@@ -68,6 +68,14 @@ async function callOpenAI(apiKey, model, messages) {
 router.post('/', authenticate, async (req, res) => {
     console.log('received request')
     const { user_resume, jd } = req.body;
+    const userId = req.user.id;
+
+    // check user's credit balance first
+    const creditBalance = await fetchUserCredits(userId);
+    // console.log(`creditBalance: ${creditBalance}`)
+    if (!creditBalance || creditBalance <= 0){
+        return res.status(400).json({ error: 'You have insufficient credits. Please buy more before trying again.' });
+    }
     
     if (!user_resume || !jd) {
         return res.status(400).json({ error: 'User resume and job description are required' });
@@ -180,11 +188,12 @@ router.post('/', authenticate, async (req, res) => {
         });
         
         // Charge user a credit
-        await updateUserCredits(req.user.id, 1, 'decrement');
+        const successCreditBalance = await updateUserCredits(req.user.id, 1, 'decrement');
         
         // Step 4: Respond with the created collection and docs
         res.status(201).json({
             collectionId,
+            successCreditBalance,
             docs: [
                 { id: userResumeDoc.id, docType: 'USER_RESUME' },
                 { id: jdDoc.id, docType: 'JD' },
@@ -208,10 +217,18 @@ router.post('/', authenticate, async (req, res) => {
 router.post('/draft', authenticate, async (req, res) => {
     // raw jds
     const { jd1, jd2, jd3 } = req.body;
+    const userId = req.user.id;
     
     // processed docs
     let tokenJdArr = [];
     let user_resume = '';
+
+    // check user's credit balance first
+    const creditBalance = await fetchUserCredits(userId);
+    // console.log(`creditBalance: ${creditBalance}`)
+    if (!creditBalance || creditBalance <= 0){
+        return res.status(400).json({ error: 'You have insufficient credits. Please buy more before trying again.' });
+    }
     
     if (!jd1 || !jd2 || !jd3) {
         return res.status(400).json({ error: 'Job descriptions are required' });

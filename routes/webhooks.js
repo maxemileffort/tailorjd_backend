@@ -1,11 +1,14 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
+const { updateUserCredits } = require('../services/credits');
 
-let stripeKey;
+let stripeKey, endpointSecret;
 if(process.env.PROD==="true"){
   stripeKey = (process.env.STRIPE_SECRET_KEY);
+  endpointSecret = (process.env.STRIPE_WEBHOOK_SECRET);
 } else {
   stripeKey = (process.env.STRIPE_TEST_SECRET_KEY);
+  endpointSecret = (process.env.STRIPE_TEST_WEBHOOK_SECRET);
 }
 
 const stripe = require('stripe')(stripeKey);
@@ -13,8 +16,6 @@ const stripe = require('stripe')(stripeKey);
 
 const router = express.Router();
 const prisma = new PrismaClient();
-
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
 router.post('/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
@@ -38,6 +39,7 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
       await handleChargeRefunded(event.data.object);
       break;
     case 'checkout.session.completed':
+      // Allocate credits for successful one-time or initial subscription purchases
       await handleCheckoutSessionCompleted(event.data.object);
       break;
     case 'customer.subscription.created':
@@ -50,6 +52,7 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
       await handleSubscriptionDeleted(event.data.object);
       break;
     case 'invoice.payment_succeeded':
+      // Allocate credits for recurring subscription renewals
       await handlePaymentSucceeded(event.data.object);
       break;
     case 'invoice.payment_failed':
@@ -202,6 +205,9 @@ async function handleCheckoutSessionCompleted(session) {
     const user = await prisma.user.findFirst({
       where: { stripeCustomerId: session.customer },
     });
+
+    const amount = 50;
+    await updateUserCredits(user.id, amount, 'increment');
 
     if (user) {
       // Log the event in the ActivityLog table
@@ -407,11 +413,8 @@ async function handlePaymentSucceeded(invoice) {
       return;
     }
 
-    // Add 50 credits to the user's account
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { creditBalance: { increment: 50 } },
-    });
+    const amount = 50;
+    await updateUserCredits(user.id, amount, 'increment');
 
     // Log the credit addition in the Credits table
     await prisma.credit.create({
