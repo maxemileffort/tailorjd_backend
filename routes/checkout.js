@@ -18,27 +18,37 @@ router.post('/create-checkout-session', async (req, res) => {
     const prices = {
       standard: { 
         price: 500, 
-        description: 'Standard Plan - 5 credits / month',
+        creditIncrement: 5, 
+        name: 'Standard Plan Subscription',
+        description: '5 credits / month (Renews every 30 days)',
         mode: 'subscription'
      },
       silver: { 
         price: 2500, 
-        description: 'Silver Plan - 50 credits / month',
+        creditIncrement: 50, 
+        name: 'Silver Plan Subscription',
+        description: '50 credits / month (Renews every 30 days)',
         mode: 'subscription'
      },
       gold: { 
         price: 5000, 
-        description: 'Gold Plan - 150 credits / month',
+        creditIncrement: 150, 
+        name: 'Gold Plan Subscription',
+        description: '150 credits / month (Renews every 30 days)',
         mode: 'subscription'
      },
       alacarte10: { 
         price: 1200, 
-        description: 'A La Carte - 10 credits (One time payment)',
+        creditIncrement: 10, 
+        name: 'Credit 10 Pack',
+        description: '10 credits (One time payment)',
         mode: 'payment'
      },
       alacarte50: { 
-        price: 5000, 
-        description: 'A La Carte - 50 credits (One time payment)',
+        price: 5000,
+        creditIncrement: 50, 
+        name: 'Credit 50 Pack',
+        description: '50 credits (One time payment)',
         mode: 'payment'
      },
     };
@@ -47,25 +57,41 @@ router.post('/create-checkout-session', async (req, res) => {
       return res.status(400).json({ error: 'Invalid plan ID' });
     }
 
-    const session = await stripe.checkout.sessions.create({
+    const sessionCreatePaylod = {
       payment_method_types: ['card'],
+      allow_promotion_codes: true,
+      metadata : {
+        creditIncrement : prices[planId].creditIncrement
+      },
       line_items: [
         {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: prices[planId].description,
+              name: prices[planId].name,
+              description: prices[planId].description,
             },
             unit_amount: prices[planId].price,
+            recurring: prices[planId].mode === 'subscription' ? { interval: 'month' } : undefined, // Add recurring for subscriptions
           },
           quantity: 1,
+          adjustable_quantity: prices[planId].mode === 'payment' ? { enabled: true, minimum: 1, maximum: 10 } : undefined, // Enable adjustable quantity for one-time payments
         },
       ],
-      mode: 'payment',
+      mode: prices[planId].mode, // Ensure this matches either 'payment' or 'subscription'
       success_url: `${process.env.FRONTEND_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL}/cancel`,
-    });
+      cancel_url: `${process.env.FRONTEND_URL}/pricing`,
+    }
 
+    if (prices[planId].mode === 'payment'){
+      // Subs auto invoice, while payments don't. We depend on the invoice
+      // to correctly increment credits, so this MUST be attached when 
+      // possible.
+      sessionCreatePaylod['invoice_creation'] = { enabled: true }
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionCreatePaylod);
+    
     res.status(200).json({ id: session.id });
   } catch (error) {
     console.error(error);
@@ -85,18 +111,45 @@ router.get('/get-session-details', async (req, res) => {
     // Retrieve the Stripe checkout session
     const session = await stripe.checkout.sessions.retrieve(session_id);
 
-    // Retrieve additional information (like customer, if needed)
-    const customer = await stripe.customers.retrieve(session.customer);
+    // Use session to pull invoice information.
+    const invoice = await stripe.invoices.retrieve(session.invoice);
 
-    // Construct response data
+    // From the invoice, pull product & customer information.
+    const products = await Promise.all(invoice.lines.data.map(async (lineItem) => {
+      if (lineItem.plan){
+        const product = await stripe.products.retrieve(lineItem.plan.product);
+        return {
+          product_name: product.name,
+          product_description: product.description,
+          product_id: product.id,
+          quantity: lineItem.quantity,
+          price: lineItem.amount / 100, // Convert amount from cents to dollars
+          currency: lineItem.currency
+        };
+      } else {
+        const product = await stripe.products.retrieve(lineItem.price.product);
+        return {
+          product_name: product.name,
+          product_description: product.description,
+          product_id: product.id,
+          quantity: lineItem.quantity,
+          price: lineItem.amount / 100, // Convert amount from cents to dollars
+          currency: lineItem.currency
+        };
+      }
+    }));
+
+    // Assign those to sessionDetails
     const sessionDetails = {
-      plan_name: session.metadata.plan_name || 'Unknown Plan',
+      creditIncrement: session.metadata.creditIncrement || 'Unknown Plan',
       amount_total: session.amount_total,
       currency: session.currency,
-      customer_email: customer.email || 'N/A',
+      customer_email: session.customer_details.email || 'N/A',
+      products: products // Include detailed product info
     };
+    
 
-    console.log(sessionDetails);
+    // console.log(`sessionDetails: ${JSON.stringify(sessionDetails)}`);
 
     // Return session details to the client
     res.json(sessionDetails);

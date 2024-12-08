@@ -13,6 +13,7 @@ model User {
   passwordHash      String
   isSubscribed      Boolean        @default(false)
   isAdmin           Boolean        @default(false)
+  role              RoleType       @default(USER)
   creditBalance     Int            @default(5)
   stripeCustomerId  String?
   createdAt         DateTime       @default(now())
@@ -96,4 +97,11 @@ enum DocType {
   REWRITE_RESUME
   COVER_LETTER
   JD
+}
+
+enum RoleType {
+  USER
+  WRITER
+  ADMIN
+  AFFILIATE
 }

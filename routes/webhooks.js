@@ -1,4 +1,6 @@
 const express = require('express');
+const bcrypt = require('bcrypt');
+const nodemailer = require('nodemailer');
 const { PrismaClient } = require('@prisma/client');
 const { updateUserCredits } = require('../services/credits');
 
@@ -13,15 +15,14 @@ if(process.env.PROD==="true"){
 
 const stripe = require('stripe')(stripeKey);
 
-
 const router = express.Router();
 const prisma = new PrismaClient();
 
 router.post('/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
-
+  
   let event;
-
+  
   try {
     // Verify the webhook signature
     event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
@@ -29,27 +30,16 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
     console.error('Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
-
+  
   // Handle the event
   switch (event.type) {
     case 'charge.succeeded':
+      // Allocate credits for successful one-time or initial subscription purchases
       await handleChargeSucceeded(event.data.object);
-      break;
-    case 'charge.refunded':
-      await handleChargeRefunded(event.data.object);
       break;
     case 'checkout.session.completed':
       // Allocate credits for successful one-time or initial subscription purchases
       await handleCheckoutSessionCompleted(event.data.object);
-      break;
-    case 'customer.subscription.created':
-      await handleSubscriptionCreated(event.data.object);
-      break;
-    case 'customer.subscription.updated':
-      await handleSubscriptionUpdated(event.data.object);
-      break;
-    case 'customer.subscription.deleted':
-      await handleSubscriptionDeleted(event.data.object);
       break;
     case 'invoice.payment_succeeded':
       // Allocate credits for recurring subscription renewals
@@ -58,140 +48,126 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
     case 'invoice.payment_failed':
       await handlePaymentFailed(event.data.object);
       break;
-    case 'invoice.upcoming':
-      await handleInvoiceUpcoming(event.data.object);
-      break;
-    case 'payment_intent.succeeded':
-      await handlePaymentIntentSucceeded(event.data.object);
-      break;
-    case 'payment_intent.payment_failed':
-      await handlePaymentIntentFailed(event.data.object);
-      break;
-    case 'payment_method.attached':
-      await handlePaymentMethodAttached(event.data.object);
-      break;
-    case 'charge.dispute.created':
-      await handleDisputeCreated(event.data.object);
-      break;
     default:
-      console.log(`Unhandled event type ${event.type}`);
+    console.log(`Unhandled event type ${event.type}`);
   }
-
+  
   // Acknowledge receipt of the event
   res.status(200).send('Received');
 });
 
 // Event Handlers
-
 async function handleChargeSucceeded(charge) {
-  console.log('Charge succeeded:', charge.id);
-
   try {
-    // Find the user based on the customer ID
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: charge.customer },
+    // Use charge to pull invoice information.
+    const invoice = await stripe.invoices.retrieve(charge.invoice);
+    
+    // From the invoice, pull product & customer information.
+    let user = await prisma.user.findUnique({
+      where: { email: invoice.customer_email },
     });
+    
+    if (!user) {
+      console.error('User not found for customer ID:', invoice.customer_email);
+      const DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD
+      // Hash the default password
+      const hashedPassword = await bcrypt.hash(DEFAULT_PASSWORD, 10);
+      // Create a new user with the email from the invoice
+      user = await prisma.user.create({
+        data: {
+          email: invoice.customer_email,
+          passwordHash : hashedPassword,
+          stripeCustomerId : invoice.customer,
+          // Add any additional user data here, e.g., username or other required fields
+        },
+      });
+      
+      console.log(`New user created with email: ${invoice.customer_email}`);
 
-    if (user) {
+      // Send Email
+      const transporter = nodemailer.createTransport({
+        service: process.env.EMAIL_SERVICE,
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
+        },
+      });
+      
+      const mailOptions = {
+        to: invoice.customer_email,
+        from: "TailorJD",
+        subject: 'TailorJD - New Account Info',
+        text: `Hi! \n\nThanks for your purchase. 
+        \nYour credits are tied to the email that was used during checkout, 
+        \nand we couldn't find that email in our user database. 
+        \nHere is your new account information:
+        \n\nEmail: ${invoice.customer_email}
+        \nPassword: ${DEFAULT_PASSWORD}
+        \n\nLogin here: https://tailorjd.com/login
+        \n\nThanks again!
+        \n- Team TJD
+        \n\n\nQuestions? Drop us a message here: https://tailorjd.com/contact`,
+      };
+      
+      transporter.sendMail(mailOptions, (error, info) => {
+        if (error) return res.status(500).send(error.toString());
+      });
+
       // Log the event in the ActivityLog table
       await prisma.activityLog.create({
         data: {
           userId: user.id,
-          action: 'Charge Succeeded',
-          activityType: 'LOG',
-          details: {
-            chargeId: charge.id,
-            amount: charge.amount,
-            currency: charge.currency,
-          },
+          action: 'User created through purchase workflow',
         },
       });
-      console.log('Charge succeeded logged for user:', user.email);
-    } else {
-      // Log the event without userId if no user is found
-      await prisma.activityLog.create({
-        data: {
-          action: 'Charge Succeeded - No User Found',
-          activityType: 'WARNING',
-          details: {
-            chargeId: charge.id,
-            customerId: charge.customer,
-            amount: charge.amount,
-            currency: charge.currency,
-          },
-        },
-      });
-      console.warn('No user found for charge customer ID:', charge.customer);
     }
-  } catch (err) {
-    console.error('Failed to log charge succeeded event:', err.message);
-    // Log the error in the ActivityLog table
+    
+    const products = await Promise.all(invoice.lines.data.map(async (lineItem) => {
+      
+      const product = await stripe.products.retrieve(lineItem.price.product);
+      return {
+        product_name: product.name,
+        product_description: product.description,
+        product_id: product.id,
+        quantity: lineItem.quantity,
+        creditIncrement: product.metadata.creditIncrement,
+        price: lineItem.amount / 100, // Convert amount from cents to dollars
+        currency: lineItem.currency
+      };
+    }));
+    
+    // Assign those to invoiceDetails
+    const invoiceDetails = {
+      creditIncrement: products[0].metadata.creditIncrement || 50, // at least 50, in case it doesn't pick up from meta data.
+      amount_total: invoice.amount_paid,
+      currency: invoice.currency,
+      customer_email: invoice.customer_email || 'N/A',
+      products: products // Include detailed product info
+    };
+    
+    
+    const amount = invoiceDetails.products[0].creditIncrement;
+    const qty = invoiceDetails.products[0].quantity;
+    const finalAmt = amount * qty;
+    await updateUserCredits(user.id, finalAmt, 'increment');
+
     await prisma.activityLog.create({
       data: {
-        action: 'Charge Succeeded - Error',
-        activityType: 'ERROR',
-        details: {
-          error: err.message,
-          chargeId: charge.id,
-          customerId: charge.customer,
-        },
+        userId: user.id,
+        action: `User purchased ${invoiceDetails.products[0].product_name}`,
+        details: JSON.stringify(invoiceDetails)
       },
     });
-  }
-}
-
-async function handleChargeRefunded(charge) {
-  console.log('Charge refunded:', charge.id);
-
-  try {
-    // Find the user based on the customer ID
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: charge.customer },
-    });
-
-    if (user) {
-      // Log the event in the ActivityLog table
-      await prisma.activityLog.create({
-        data: {
-          userId: user.id,
-          action: 'Charge Refunded',
-          activityType: 'LOG',
-          details: {
-            chargeId: charge.id,
-            amountRefunded: charge.amount_refunded,
-            reason: charge.refunds.data[0]?.reason || 'Unknown',
-          },
-        },
-      });
-      console.log('Charge refunded logged for user:', user.email);
-    } else {
-      // Log the event without userId if no user is found
-      await prisma.activityLog.create({
-        data: {
-          action: 'Charge Refunded - No User Found',
-          activityType: 'WARNING',
-          details: {
-            chargeId: charge.id,
-            customerId: charge.customer,
-            amountRefunded: charge.amount_refunded,
-            reason: charge.refunds.data[0]?.reason || 'Unknown',
-          },
-        },
-      });
-      console.warn('No user found for charge customer ID:', charge.customer);
-    }
+    
   } catch (err) {
-    console.error('Failed to log charge refunded event:', err.message);
-    // Log the error in the ActivityLog table
+    console.error('Failed to process payment succeeded event:', err.message);
+
     await prisma.activityLog.create({
       data: {
-        action: 'Charge Refunded - Error',
+        userId: user.id,
+        action: `Error with invoice ID ${charge.invoice}`,
         activityType: 'ERROR',
-        details: {
-          error: err.message,
-          chargeId: charge.id,
-          customerId: charge.customer,
-        },
+        details: JSON.stringify(charge)
       },
     });
   }
@@ -199,53 +175,76 @@ async function handleChargeRefunded(charge) {
 
 async function handleCheckoutSessionCompleted(session) {
   console.log('Checkout session completed:', session.id);
-
+  
+  // Retrieve the Stripe checkout session
+  // const session = await stripe.checkout.sessions.retrieve(session.id);
+  
+  // Use session to pull invoice information.
+  const invoice = await stripe.invoices.retrieve(session.invoice);
+  
+  // From the invoice, pull product & customer information.
+  const products = await Promise.all(invoice.lines.data.map(async (lineItem) => {
+    if (lineItem.plan){
+      const product = await stripe.products.retrieve(lineItem.plan.product);
+      return {
+        product_name: product.name,
+        product_description: product.description,
+        product_id: product.id,
+        quantity: lineItem.quantity,
+        price: lineItem.amount / 100, // Convert amount from cents to dollars
+        currency: lineItem.currency
+      };
+    } else {
+      const product = await stripe.products.retrieve(lineItem.price.product);
+      return {
+        product_name: product.name,
+        product_description: product.description,
+        product_id: product.id,
+        quantity: lineItem.quantity,
+        price: lineItem.amount / 100, // Convert amount from cents to dollars
+        currency: lineItem.currency
+      };
+    }
+  }));
+  
+  // Assign those to sessionDetails
+  const sessionDetails = {
+    creditIncrement: session.metadata.creditIncrement || 'Unknown Plan',
+    amount_total: session.amount_total,
+    currency: session.currency,
+    customer_email: session.customer_details.email || 'N/A',
+    products: products // Include detailed product info
+  };
+  
   try {
     // Find the user based on the customer ID
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: session.customer },
+    const user = await prisma.user.findUnique({
+      where: { email: sessionDetails.customer_email },
     });
+    
+    const amount = sessionDetails.creditIncrement;
+    const qty = sessionDetails.products[0].quantity;
+    const finalAmt = amount * qty;
+    // await updateUserCredits(user.id, finalAmt, 'increment');
 
-    const amount = 50;
-    await updateUserCredits(user.id, amount, 'increment');
-
-    if (user) {
-      // Log the event in the ActivityLog table
-      await prisma.activityLog.create({
-        data: {
-          userId: user.id,
-          action: 'Checkout Session Completed',
-          activityType: 'LOG',
-          details: {
-            sessionId: session.id,
-            amountTotal: session.amount_total,
-            paymentStatus: session.payment_status,
-          },
-        },
-      });
-      console.log('Checkout session completed logged for user:', user.email);
-    } else {
-      // Log the event without userId if no user is found
-      await prisma.activityLog.create({
-        data: {
-          action: 'Checkout Session Completed - No User Found',
-          activityType: 'WARNING',
-          details: {
-            sessionId: session.id,
-            customerId: session.customer,
-            amountTotal: session.amount_total,
-            paymentStatus: session.payment_status,
-          },
-        },
-      });
-      console.warn('No user found for session customer ID:', session.customer);
-    }
+    await prisma.activityLog.create({
+      data: {
+        userId: user.id,
+        action: `New Checkout Session`,
+        activityType: 'LOG',
+        details: { 
+          session:JSON.stringify(session), 
+          details:JSON.stringify(sessionDetails),
+        }
+      },
+    });
+    
   } catch (err) {
     console.error('Failed to log checkout session completed event:', err.message);
     // Log the error in the ActivityLog table
     await prisma.activityLog.create({
       data: {
-        action: 'Checkout Session Completed - Error',
+        action: 'Checkout Session - Error',
         activityType: 'ERROR',
         details: {
           error: err.message,
@@ -257,190 +256,86 @@ async function handleCheckoutSessionCompleted(session) {
   }
 }
 
-async function handleSubscriptionCreated(subscription) {
-  console.log('Subscription created:', subscription.id);
-
-  try {
-    // Find the user based on the customer ID
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: subscription.customer },
-    });
-
-    if (user) {
-      // Log the event in the ActivityLog table
-      await prisma.activityLog.create({
-        data: {
-          userId: user.id,
-          action: 'Subscription Created',
-          activityType: 'LOG',
-          details: {
-            subscriptionId: subscription.id,
-            status: subscription.status,
-            items: subscription.items.data.map((item) => ({
-              priceId: item.price.id,
-              quantity: item.quantity,
-            })),
-          },
-        },
-      });
-      console.log('Subscription created logged for user:', user.email);
-    } else {
-      // Log the event without userId if no user is found
-      await prisma.activityLog.create({
-        data: {
-          action: 'Subscription Created - No User Found',
-          activityType: 'WARNING',
-          details: {
-            subscriptionId: subscription.id,
-            customerId: subscription.customer,
-            status: subscription.status,
-          },
-        },
-      });
-      console.warn('No user found for subscription customer ID:', subscription.customer);
-    }
-  } catch (err) {
-    console.error('Failed to log subscription created event:', err.message);
-    // Log the error in the ActivityLog table
-    await prisma.activityLog.create({
-      data: {
-        action: 'Subscription Created - Error',
-        activityType: 'ERROR',
-        details: {
-          error: err.message,
-          subscriptionId: subscription.id,
-          customerId: subscription.customer,
-        },
-      },
-    });
-  }
-}
-
-async function handleSubscriptionUpdated(subscription) {
-  console.log('Subscription updated:', subscription.id);
-
-  try {
-    // Find the user based on the customer ID
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: subscription.customer },
-    });
-
-    if (user) {
-      // Log the event in the ActivityLog table
-      await prisma.activityLog.create({
-        data: {
-          userId: user.id,
-          action: 'Subscription Updated',
-          activityType: 'LOG',
-          details: {
-            subscriptionId: subscription.id,
-            status: subscription.status,
-            items: subscription.items.data.map((item) => ({
-              priceId: item.price.id,
-              quantity: item.quantity,
-            })),
-          },
-        },
-      });
-      console.log('Subscription updated logged for user:', user.email);
-    } else {
-      // Log the event without userId if no user is found
-      await prisma.activityLog.create({
-        data: {
-          action: 'Subscription Updated - No User Found',
-          activityType: 'WARNING',
-          details: {
-            subscriptionId: subscription.id,
-            customerId: subscription.customer,
-            status: subscription.status,
-          },
-        },
-      });
-      console.warn('No user found for subscription customer ID:', subscription.customer);
-    }
-  } catch (err) {
-    console.error('Failed to log subscription updated event:', err.message);
-    // Log the error in the ActivityLog table
-    await prisma.activityLog.create({
-      data: {
-        action: 'Subscription Updated - Error',
-        activityType: 'ERROR',
-        details: {
-          error: err.message,
-          subscriptionId: subscription.id,
-          customerId: subscription.customer,
-        },
-      },
-    });
-  }
-}
-
-async function handleSubscriptionDeleted(subscription) {
-  const customerId = subscription.customer;
-
-  try {
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: customerId },
-    });
-
-    if (!user) {
-      console.error('User not found for customer ID:', customerId);
-      return;
-    }
-
-    // Mark the user as unsubscribed
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { isSubscribed: false },
-    });
-
-    console.log('Subscription canceled for user:', user.email);
-  } catch (err) {
-    console.error('Failed to process subscription deletion event:', err.message);
-  }
-}
-
 async function handlePaymentSucceeded(invoice) {
-  const customerId = invoice.customer;
-
   try {
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: customerId },
+    
+    // From the invoice, pull product & customer information.
+    const user = await prisma.user.findUnique({
+      where: { email: invoice.customer_email },
     });
-
+    
     if (!user) {
-      console.error('User not found for customer ID:', customerId);
+      console.error('User not found for customer ID:', invoice.customer_email);
       return;
     }
+    
+    const products = await Promise.all(invoice.lines.data.map(async (lineItem) => {
+      
+      const product = await stripe.products.retrieve(lineItem.price.product);
+      return {
+        product_name: product.name,
+        product_description: product.description,
+        product_id: product.id,
+        quantity: lineItem.quantity,
+        creditIncrement: product.metadata.creditIncrement,
+        price: lineItem.amount / 100, // Convert amount from cents to dollars
+        currency: lineItem.currency
+      };
+    }));
+    
+    // Assign those to sessionDetails
+    const invoiceDetails = {
+      creditIncrement: session.metadata.creditIncrement || 'Unknown Plan',
+      amount_total: session.amount_total,
+      currency: session.currency,
+      customer_email: session.customer_details.email || 'N/A',
+      products: products // Include detailed product info
+    };
+    
+    
+    const amount = invoiceDetails.products[0].creditIncrement;
+    const qty = invoiceDetails.products[0].creditIncrement;
+    const finalAmt = invoiceDetails.products[0].creditIncrement;
+    // await updateUserCredits(user.id, finalAmt, 'increment');
 
-    const amount = 50;
-    await updateUserCredits(user.id, amount, 'increment');
-
-    // Log the credit addition in the Credits table
-    await prisma.credit.create({
+    await prisma.activityLog.create({
       data: {
         userId: user.id,
-        amount: 50,
-        type: 'subscription',
-        stripeProductId: process.env.STRIPE_PRICE_ID,
+        action: `Payment Success`,
+        activityType: 'LOG',
+        details: { 
+          session:JSON.stringify(invoice), 
+          details:JSON.stringify(invoiceDetails),
+        }
       },
     });
-
-    console.log('Credits added for user:', user.email);
+    
   } catch (err) {
     console.error('Failed to process payment succeeded event:', err.message);
+
+    await prisma.activityLog.create({
+      data: {
+        userId: user.id,
+        action: `Payment Success`,
+        activityType: 'LOG',
+        details: { 
+          err, 
+          invoice,
+        }
+      },
+    });
   }
 }
 
 async function handlePaymentFailed(invoice) {
   console.log('Payment failed:', invoice.id);
-
+  
   try {
-    // Find the user based on the customer ID
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: invoice.customer },
+    // Find the user based on the customer email
+    const user = await prisma.user.findUnique({
+      where: { email: invoice.customer_email },
     });
-
+    
     if (user) {
       // Log the event in the ActivityLog table
       await prisma.activityLog.create({
@@ -452,7 +347,6 @@ async function handlePaymentFailed(invoice) {
             invoiceId: invoice.id,
             amountDue: invoice.amount_due,
             currency: invoice.currency,
-            reason: invoice.payment_intent?.last_payment_error?.message || 'Unknown',
           },
         },
       });
@@ -484,304 +378,6 @@ async function handlePaymentFailed(invoice) {
           error: err.message,
           invoiceId: invoice.id,
           customerId: invoice.customer,
-        },
-      },
-    });
-  }
-}
-
-async function handleInvoiceUpcoming(invoice) {
-  console.log('Invoice upcoming:', invoice.id);
-
-  try {
-    // Find the user based on the customer ID
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: invoice.customer },
-    });
-
-    if (user) {
-      // Log the event in the ActivityLog table
-      await prisma.activityLog.create({
-        data: {
-          userId: user.id,
-          action: 'Invoice Upcoming',
-          activityType: 'LOG',
-          details: {
-            invoiceId: invoice.id,
-            amountDue: invoice.amount_due,
-            currency: invoice.currency,
-            dueDate: invoice.due_date,
-          },
-        },
-      });
-      console.log('Invoice upcoming logged for user:', user.email);
-    } else {
-      // Log the event without userId if no user is found
-      await prisma.activityLog.create({
-        data: {
-          action: 'Invoice Upcoming - No User Found',
-          activityType: 'WARNING',
-          details: {
-            invoiceId: invoice.id,
-            customerId: invoice.customer,
-            amountDue: invoice.amount_due,
-            currency: invoice.currency,
-            dueDate: invoice.due_date,
-          },
-        },
-      });
-      console.warn('No user found for invoice upcoming customer ID:', invoice.customer);
-    }
-  } catch (err) {
-    console.error('Failed to log invoice upcoming event:', err.message);
-    // Log the error in the ActivityLog table
-    await prisma.activityLog.create({
-      data: {
-        action: 'Invoice Upcoming - Error',
-        activityType: 'ERROR',
-        details: {
-          error: err.message,
-          invoiceId: invoice.id,
-          customerId: invoice.customer,
-        },
-      }
-    });
-  };
-}
-
-async function handlePaymentIntentSucceeded(paymentIntent) {
-  console.log('Payment intent succeeded:', paymentIntent.id);
-
-  try {
-    // Find the user based on the customer ID
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: paymentIntent.customer },
-    });
-
-    if (user) {
-      // Log the event in the ActivityLog table
-      await prisma.activityLog.create({
-        data: {
-          userId: user.id,
-          action: 'Payment Intent Succeeded',
-          activityType: 'LOG',
-          details: {
-            paymentIntentId: paymentIntent.id,
-            amountReceived: paymentIntent.amount_received,
-            currency: paymentIntent.currency,
-          },
-        },
-      });
-      console.log('Payment intent succeeded logged for user:', user.email);
-    } else {
-      // Log the event without userId if no user is found
-      await prisma.activityLog.create({
-        data: {
-          action: 'Payment Intent Succeeded - No User Found',
-          activityType: 'WARNING',
-          details: {
-            paymentIntentId: paymentIntent.id,
-            customerId: paymentIntent.customer,
-            amountReceived: paymentIntent.amount_received,
-            currency: paymentIntent.currency,
-          },
-        },
-      });
-      console.warn('No user found for payment intent customer ID:', paymentIntent.customer);
-    }
-  } catch (err) {
-    console.error('Failed to log payment intent succeeded event:', err.message);
-    // Log the error in the ActivityLog table
-    await prisma.activityLog.create({
-      data: {
-        action: 'Payment Intent Succeeded - Error',
-        activityType: 'ERROR',
-        details: {
-          error: err.message,
-          paymentIntentId: paymentIntent.id,
-          customerId: paymentIntent.customer,
-        },
-      },
-    });
-  }
-}
-
-async function handlePaymentIntentFailed(paymentIntent) {
-  console.log('Payment intent failed:', paymentIntent.id);
-
-  try {
-    // Find the user based on the customer ID
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: paymentIntent.customer },
-    });
-
-    if (user) {
-      // Log the event in the ActivityLog table
-      await prisma.activityLog.create({
-        data: {
-          userId: user.id,
-          action: 'Payment Intent Failed',
-          activityType: 'WARNING',
-          details: {
-            paymentIntentId: paymentIntent.id,
-            amount: paymentIntent.amount,
-            currency: paymentIntent.currency,
-            reason: paymentIntent.last_payment_error?.message || 'Unknown',
-          },
-        },
-      });
-      console.log('Payment intent failed logged for user:', user.email);
-    } else {
-      // Log the event without userId if no user is found
-      await prisma.activityLog.create({
-        data: {
-          action: 'Payment Intent Failed - No User Found',
-          activityType: 'WARNING',
-          details: {
-            paymentIntentId: paymentIntent.id,
-            customerId: paymentIntent.customer,
-            amount: paymentIntent.amount,
-            currency: paymentIntent.currency,
-          },
-        },
-      });
-      console.warn('No user found for payment intent customer ID:', paymentIntent.customer);
-    }
-  } catch (err) {
-    console.error('Failed to log payment intent failed event:', err.message);
-    // Log the error in the ActivityLog table
-    await prisma.activityLog.create({
-      data: {
-        action: 'Payment Intent Failed - Error',
-        activityType: 'ERROR',
-        details: {
-          error: err.message,
-          paymentIntentId: paymentIntent.id,
-          customerId: paymentIntent.customer,
-        },
-      }
-    });
-  };
-}
-
-async function handlePaymentMethodAttached(paymentMethod) {
-  console.log('Payment method attached:', paymentMethod.id);
-
-  try {
-    // Find the user based on the customer ID
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: paymentMethod.customer },
-    });
-
-    if (user) {
-      // Log the event in the ActivityLog table
-      await prisma.activityLog.create({
-        data: {
-          userId: user.id,
-          action: 'Payment Method Attached',
-          activityType: 'LOG',
-          details: {
-            paymentMethodId: paymentMethod.id,
-            type: paymentMethod.type,
-            card: paymentMethod.card
-              ? {
-                  brand: paymentMethod.card.brand,
-                  last4: paymentMethod.card.last4,
-                  expMonth: paymentMethod.card.exp_month,
-                  expYear: paymentMethod.card.exp_year,
-                }
-              : null,
-          },
-        },
-      });
-      console.log('Payment method attached logged for user:', user.email);
-    } else {
-      // Log the event without userId if no user is found
-      await prisma.activityLog.create({
-        data: {
-          action: 'Payment Method Attached - No User Found',
-          activityType: 'WARNING',
-          details: {
-            paymentMethodId: paymentMethod.id,
-            customerId: paymentMethod.customer,
-            type: paymentMethod.type,
-          },
-        },
-      });
-      console.warn('No user found for payment method customer ID:', paymentMethod.customer);
-    }
-  } catch (err) {
-    console.error('Failed to log payment method attached event:', err.message);
-    // Log the error in the ActivityLog table
-    await prisma.activityLog.create({
-      data: {
-        action: 'Payment Method Attached - Error',
-        activityType: 'ERROR',
-        details: {
-          error: err.message,
-          paymentMethodId: paymentMethod.id,
-          customerId: paymentMethod.customer,
-        },
-      },
-    });
-  }
-}
-
-async function handleDisputeCreated(dispute) {
-  console.log('Dispute created:', dispute.id);
-
-  try {
-    // Find the user based on the customer ID
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: dispute.customer },
-    });
-
-    if (user) {
-      // Log the event in the ActivityLog table
-      await prisma.activityLog.create({
-        data: {
-          userId: user.id,
-          action: 'Dispute Created',
-          activityType: 'WARNING',
-          details: {
-            disputeId: dispute.id,
-            amount: dispute.amount,
-            currency: dispute.currency,
-            reason: dispute.reason,
-            status: dispute.status,
-          },
-        },
-      });
-      console.log('Dispute created logged for user:', user.email);
-    } else {
-      // Log the event without userId if no user is found
-      await prisma.activityLog.create({
-        data: {
-          action: 'Dispute Created - No User Found',
-          activityType: 'WARNING',
-          details: {
-            disputeId: dispute.id,
-            customerId: dispute.customer,
-            amount: dispute.amount,
-            currency: dispute.currency,
-            reason: dispute.reason,
-            status: dispute.status,
-          },
-        },
-      });
-      console.warn('No user found for dispute customer ID:', dispute.customer);
-    }
-  } catch (err) {
-    console.error('Failed to log dispute created event:', err.message);
-    // Log the error in the ActivityLog table
-    await prisma.activityLog.create({
-      data: {
-        action: 'Dispute Created - Error',
-        activityType: 'ERROR',
-        details: {
-          error: err.message,
-          disputeId: dispute.id,
-          customerId: dispute.customer,
         },
       },
     });
