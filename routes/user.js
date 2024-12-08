@@ -7,6 +7,24 @@ const jwt = require('jsonwebtoken');
 const router = express.Router();
 const prisma = new PrismaClient();
 
+// Get demographics for the authenticated user
+router.get('/demographics', authenticate, async (req, res) => {
+  console.log(req.body);
+  try {
+    const demographics = await prisma.demographics.findUnique({
+      where: { userId: req.user.id },
+    });
+
+    if (!demographics) {
+      return res.status(404).json({ error: 'Demographics not found' });
+    }
+
+    res.status(200).json(demographics);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch demographics' });
+  }
+});
+
 // Get all users (admin only)
 router.get('/', authenticate, isAdmin, async (req, res) => {
   try {
@@ -29,6 +47,9 @@ router.get('/:id', authenticate, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch user' });
   }
 });
+
+
+
 
 // Create a new user
 router.post('/', async (req, res) => {
@@ -62,6 +83,37 @@ router.post('/', async (req, res) => {
       return;
     }
     res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// Update demographics for the authenticated user
+router.put('/demographics', authenticate, async (req, res) => {
+  const { f_name, l_name, jd_target, currentIndustry, currentResume } = req.body;
+  console.log(req.body);
+  try {
+    const updatedDemographics = await prisma.demographics.upsert({
+      where: { userId: req.user.id },
+      create: {
+        userId: req.user.id,
+        f_name,
+        l_name,
+        jd_target,
+        currentIndustry,
+        currentResume,
+      },
+      update: {
+        f_name,
+        l_name,
+        jd_target,
+        currentIndustry,
+        currentResume,
+      },
+    });
+
+    res.status(200).json(updatedDemographics);
+  } catch (err) {
+    console.error('Error updating demographics:', err);
+    res.status(500).json({ error: 'Failed to update demographics.' });
   }
 });
 

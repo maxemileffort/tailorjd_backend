@@ -71,12 +71,12 @@ app.use('/api/subscription', subscriptionRoutes); // Strictly for upgrades and d
 app.use('/api/rewrites', rewriteRoutes); // Handles processing of JDs and Resumes
 app.use('/api/credits', creditsRoutes); // Handles credits logic
 app.use('/api/checkouts', createCheckoutSession); // only checkouts
-app.use('/api/contact', contactRoutes); // only checkouts
+app.use('/api/contact', contactRoutes); // Handles contact form submisions
 
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ error: 'An unexpected error occurred' });
+  res.status(500).json({ error: 'An unexpected error occurred', req });
 });
 
 // Export app for testing

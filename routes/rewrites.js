@@ -1,12 +1,17 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authenticate } = require('../middleware/auth'); 
+const { updateUserCredits } = require('../services/credits');
+
+// Example usage
+
 const router = express.Router();
 const prisma = new PrismaClient();
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const MODEL = 'gpt-4o-mini';
 
+// Protect our prompting strategy here.
 let SYSTEM_PROMPT = process.env.SYSTEM_PROMPT;
 let GUARDRAIL_PROMPT1 = process.env.GUARDRAIL_PROMPT1;
 let GUARDRAIL_PROMPT2 = process.env.GUARDRAIL_PROMPT2;
@@ -173,6 +178,9 @@ router.post('/', authenticate, async (req, res) => {
                 collectionId,
             },
         });
+        
+        // Charge user a credit
+        await updateUserCredits(req.user.id, 1, 'decrement');
         
         // Step 4: Respond with the created collection and docs
         res.status(201).json({
@@ -352,6 +360,9 @@ router.post('/draft', authenticate, async (req, res) => {
                 collectionId,
             },
         });
+
+        // Charge user a credit
+        await updateUserCredits(req.user.id, 1, 'decrement');
 
         // Step 4: Respond with the created collection and docs
         res.status(201).json({
