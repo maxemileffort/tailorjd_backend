@@ -25,7 +25,7 @@ const PORT = process.env.PORT || 3000;
 app.use(helmet());
 
 // Check if production environment variable is set
-const isProd = process.env.PROD === 'true';
+const isProd = process.env.PROD === 'true' || process.env.PROD === true;
 
 if (isProd) {
   // Production-specific CORS configuration
