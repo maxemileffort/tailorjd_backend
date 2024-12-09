@@ -30,12 +30,13 @@ const isProd = process.env.PROD === 'true';
 if (isProd) {
   // Production-specific CORS configuration
   const allowedOrigins = [
-    'https://example.com',
-    'https://another-example.com',
-    'https://yetanother-example.com',
-    'http://192.168.1.1', // Example IP address
-    'http://192.168.1.2', // Another IP address
-    'http://192.168.1.3'  // Yet another IP address
+    'https://tailorjd.com',
+    // 'https://example.com',
+    // 'https://another-example.com',
+    // 'https://yetanother-example.com',
+    // 'http://192.168.1.1', // Example IP address
+    // 'http://192.168.1.2', // Another IP address
+    // 'http://192.168.1.3'  // Yet another IP address
   ];
 
   app.use(cors({

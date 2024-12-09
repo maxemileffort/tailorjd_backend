@@ -12,20 +12,20 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const MODEL = 'gpt-4o-mini';
 
 // Protect our prompting strategy here.
-let SYSTEM_PROMPT = process.env.SYSTEM_PROMPT;
-let GUARDRAIL_PROMPT1 = process.env.GUARDRAIL_PROMPT1;
-let GUARDRAIL_PROMPT2 = process.env.GUARDRAIL_PROMPT2;
-let GUARDRAIL_PROMPT3 = process.env.GUARDRAIL_PROMPT3;
-let FINAL_SYSTEM_PROMPT = SYSTEM_PROMPT + GUARDRAIL_PROMPT1 + GUARDRAIL_PROMPT2 + GUARDRAIL_PROMPT3;
+let SYSTEM_PROMPT = Buffer.from(process.env.SYSTEM_PROMPT, 'base64').toString('utf-8');
+let GUARDRAIL_PROMPT1 = Buffer.from(process.env.GUARDRAIL_PROMPT1, 'base64').toString('utf-8');
+let GUARDRAIL_PROMPT2 = Buffer.from(process.env.GUARDRAIL_PROMPT2, 'base64').toString('utf-8');
+let GUARDRAIL_PROMPT3 = Buffer.from(process.env.GUARDRAIL_PROMPT3, 'base64').toString('utf-8');
+let FINAL_SYSTEM_PROMPT = (SYSTEM_PROMPT + GUARDRAIL_PROMPT1 + GUARDRAIL_PROMPT2 + GUARDRAIL_PROMPT3) ;
 
 // Prompts for Rewrites
-let ANALYSIS_PROMPT = process.env.ANALYSIS_PROMPT;
-let COMPARE_PROMPT = process.env.COMPARE_PROMPT;
-let COVERLETTER_PROMPT = process.env.COVERLETTER_PROMPT;
+let ANALYSIS_PROMPT = Buffer.from(process.env.ANALYSIS_PROMPT, 'base64').toString('utf-8') ;
+let COMPARE_PROMPT = Buffer.from(process.env.COMPARE_PROMPT, 'base64').toString('utf-8') ;
+let COVERLETTER_PROMPT = Buffer.from(process.env.COVERLETTER_PROMPT, 'base64').toString('utf-8') ;
 
 // Prompts for Drafts
-let TOKENIZE_PROMPT = process.env.TOKENIZE_PROMPT;
-let DRAFT_PROMPT = process.env.DRAFT_PROMPT;
+let TOKENIZE_PROMPT = Buffer.from(process.env.TOKENIZE_PROMPT, 'base64').toString('utf-8') ;
+let DRAFT_PROMPT = Buffer.from(process.env.DRAFT_PROMPT, 'base64').toString('utf-8') ;
 
 function getCurrentDateTime() {
     const now = new Date();

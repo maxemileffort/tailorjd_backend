@@ -17,7 +17,7 @@ router.post('/', async (req, res) => {
       service: process.env.EMAIL_SERVICE,
       auth: {
         user: process.env.EMAIL_USER, // Your email
-        pass: process.env.EMAIL_PASS, // Your email password or app password
+        pass: Buffer.from(process.env.EMAIL_PASS, 'base64').toString('utf-8'), 
       },
     });
 

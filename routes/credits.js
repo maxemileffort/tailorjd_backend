@@ -38,37 +38,37 @@ router.post('/admin/add-credits', isAdmin, async (req, res) => {
     }
 });
 
-// Endpoint for users to purchase credits
-router.post('/buy-credits', async (req, res) => {
-    const { userId, amount, stripeProductId } = req.body;
+// // Endpoint for users to purchase credits
+// router.post('/buy-credits', async (req, res) => {
+//     const { userId, amount, stripeProductId } = req.body;
 
-    if (!userId || !amount) {
-        return res.status(400).json({ message: 'User ID and amount are required' });
-    }
+//     if (!userId || !amount) {
+//         return res.status(400).json({ message: 'User ID and amount are required' });
+//     }
 
-    try {
-        // Process payment with Stripe (implementation needed)
+//     try {
+//         // Process payment with Stripe (implementation needed)
         
-        // After successful purchase, update user's credit balance
-        const user = await prisma.user.update({
-            where: { id: userId },
-            data: { creditBalance: { increment: amount } },
-        });
+//         // After successful purchase, update user's credit balance
+//         const user = await prisma.user.update({
+//             where: { id: userId },
+//             data: { creditBalance: { increment: amount } },
+//         });
 
-        // Log the purchase in ActivityLog
-        await prisma.activityLog.create({
-            data: {
-                userId,
-                action: `Purchased ${amount} credits.`,
-                activityType: 'LOG',
-            },
-        });
+//         // Log the purchase in ActivityLog
+//         await prisma.activityLog.create({
+//             data: {
+//                 userId,
+//                 action: `Purchased ${amount} credits.`,
+//                 activityType: 'LOG',
+//             },
+//         });
 
-        res.status(200).json({ message: 'Credits purchased successfully', user });
-    } catch (error) {
-        res.status(500).json({ message: 'Error purchasing credits', error });
-    }
-});
+//         res.status(200).json({ message: 'Credits purchased successfully', user });
+//     } catch (error) {
+//         res.status(500).json({ message: 'Error purchasing credits', error });
+//     }
+// });
 
 // Endpoint for users to use credits
 router.post('/use-credits', async (req, res) => {
