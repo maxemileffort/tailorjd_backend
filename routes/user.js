@@ -75,11 +75,33 @@ router.post('/', async (req, res) => {
       { expiresIn: '1h' }
     );
 
+    // Send Email
+  const transporter = nodemailer.createTransport({
+    service: process.env.EMAIL_SERVICE,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: Buffer.from(process.env.EMAIL_PASS, 'base64').toString('utf-8'),
+    },
+  });
+
+  const mailOptions = {
+    to: email,
+    from: "TailorJD",
+    subject: 'TailorJD - First Time Login',
+    text: `Hi there!\n\nYou'll use the email and password you signed up with to login after you get to the login page, which is here: ${process.env.FRONTEND_URL}/reset/${token} \n\nThanks for signing up, and enjoy your 5 free resumes, on us! \n\n- Team TJD`,
+  };
+
+  transporter.sendMail(mailOptions, (error, info) => {
+    if (error) return res.status(500).send(error.toString());
+    res.send('Password reset link sent to your email. You should receive it in the next 5-10 minutes.');
+  });
+
     res.status(201).json({ token });
   } catch (err) {
-    // console.error(err);
-    if(String(err).includes('Unique constraint failed on the fields: (`email`)')){
-      res.status(500).json({ error: 'Looks like that user exists already.' });  
+    console.error(err);
+    // if(String(err).includes('Unique constraint failed on the fields: (`email`)')){
+    if (err.code === 'P2002') { // Unique constraint violation
+      res.status(409).json({ error: 'Looks like that user exists already.' });  
       return;
     }
     res.status(500).json({ error: 'Failed to create user' });
