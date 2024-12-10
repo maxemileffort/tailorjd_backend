@@ -34,7 +34,7 @@ model Demographics {
   jd_target       String?
   currentIndustry String?
   currentResume   String?
-  user            User    @relation(fields: [userId], references: [id])
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Docs {
@@ -45,9 +45,9 @@ model Docs {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   collectionId   String  
-  collection     DocCollection @relation(fields: [collectionId], references: [id])
+  collection     DocCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model DocCollection {
@@ -71,7 +71,7 @@ model ActivityLog {
   details      Json?
   createdAt    DateTime     @default(now())
 
-  user User? @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
 
 model Sessions {
@@ -80,9 +80,9 @@ model Sessions {
   expiry      DateTime 
   token       String        @unique
   isActive    Boolean       @default(true)
-  userId      String
+  userId      String?
 
-  user User @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
 
 enum activityType {
