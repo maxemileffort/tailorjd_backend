@@ -14,7 +14,7 @@ const updateUserCredits = async (userId, amount, operation) => {
         // Determine the operation to perform
         const updateData = {
             creditBalance: {
-                [operation]: amount, // Use dynamic property to apply increment or decrement
+                [operation]: parseInt(amount, 10), // Use dynamic property to apply increment or decrement
             },
         };
 
