@@ -293,18 +293,24 @@ async function handlePaymentSucceeded(invoice) {
     
     // Assign those to sessionDetails
     const invoiceDetails = {
-      creditIncrement: session.metadata.creditIncrement || 'Unknown Plan',
-      amount_total: session.amount_total,
-      currency: session.currency,
-      customer_email: session.customer_details.email || 'N/A',
+      creditIncrement: products[0].creditIncrement || 'Unknown Plan',
+      amount_total: invoice.amount_paid,
+      qty: products[0].quantity,
+      currency: products[0].currency,
+      customer_email: invoice.customer_email || 'N/A',
       products: products // Include detailed product info
     };
     
+    // if there is a 100% off coupon applied, users won't get their credits.
+    // this handles that situation.
+    const amount = invoiceDetails.creditIncrement;
+    const qty = invoiceDetails.qty;
+    const finalAmt = amount * qty;
+    if (!invoice.charge){
+      console.log('100% off coupon applied. Updating credits. -MW')
+      await updateUserCredits(user.id, finalAmt, 'increment');
+    }
     
-    const amount = invoiceDetails.products[0].creditIncrement;
-    const qty = invoiceDetails.products[0].creditIncrement;
-    const finalAmt = invoiceDetails.products[0].creditIncrement;
-    // await updateUserCredits(user.id, finalAmt, 'increment');
 
     await prisma.activityLog.create({
       data: {
