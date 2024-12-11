@@ -18,6 +18,8 @@ const updateUserCredits = async (userId, amount, operation) => {
             },
         };
 
+        console.log(`update details: ${updateData}`);
+
         // Update the user's credit balance
         const updatedUser = await prisma.user.update({
             where: { id: userId },

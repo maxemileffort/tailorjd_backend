@@ -306,6 +306,10 @@ async function handlePaymentSucceeded(invoice) {
     const amount = invoiceDetails.creditIncrement;
     const qty = invoiceDetails.qty;
     const finalAmt = amount * qty;
+
+    console.log(`finalAmt: ${finalAmt}`);
+    console.log(`invoiceDetails: ${JSON.stringify(invoiceDetails)}`);
+
     if (!invoice.charge){
       console.log('100% off coupon applied. Updating credits. -MW')
       await updateUserCredits(user.id, finalAmt, 'increment');
