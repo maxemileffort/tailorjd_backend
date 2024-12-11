@@ -58,12 +58,15 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
 
 // Event Handlers
 async function handleChargeSucceeded(charge) {
+  
+  let user;
+
   try {
     // Use charge to pull invoice information.
     const invoice = await stripe.invoices.retrieve(charge.invoice);
     
     // From the invoice, pull product & customer information.
-    let user = await prisma.user.findUnique({
+    user = await prisma.user.findUnique({
       where: { email: invoice.customer_email },
     });
     
@@ -176,6 +179,8 @@ async function handleChargeSucceeded(charge) {
 async function handleCheckoutSessionCompleted(session) {
   console.log('Checkout session completed:', session.id);
   
+  let user;
+  
   // Retrieve the Stripe checkout session
   // const session = await stripe.checkout.sessions.retrieve(session.id);
   
@@ -218,7 +223,7 @@ async function handleCheckoutSessionCompleted(session) {
   
   try {
     // Find the user based on the customer ID
-    const user = await prisma.user.findUnique({
+    user = await prisma.user.findUnique({
       where: { email: sessionDetails.customer_email },
     });
     
@@ -257,10 +262,13 @@ async function handleCheckoutSessionCompleted(session) {
 }
 
 async function handlePaymentSucceeded(invoice) {
+
+  let user;
+
   try {
     
     // From the invoice, pull product & customer information.
-    const user = await prisma.user.findUnique({
+    user = await prisma.user.findUnique({
       where: { email: invoice.customer_email },
     });
     
@@ -329,10 +337,14 @@ async function handlePaymentSucceeded(invoice) {
 
 async function handlePaymentFailed(invoice) {
   console.log('Payment failed:', invoice.id);
+
+  
+  let user;
+
   
   try {
     // Find the user based on the customer email
-    const user = await prisma.user.findUnique({
+    user = await prisma.user.findUnique({
       where: { email: invoice.customer_email },
     });
     

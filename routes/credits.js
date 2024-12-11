@@ -115,6 +115,7 @@ router.get('/read-credits', async (req, res) => {
     const userId = user.id;
 
     if (!userId) {
+        console.error("Request without user object was made.")
         return res.status(400).json({ message: 'User ID and amount are required' });
     }
 
@@ -127,7 +128,7 @@ router.get('/read-credits', async (req, res) => {
 
         res.status(200).json({ creditBalance });
     } catch (error) {
-        res.status(500).json({ message: 'Error finding credit credit balance:', error });
+        res.status(500).json({ message: 'Error finding credit balance:', error });
     }
 });
 module.exports = router;
