@@ -60,9 +60,7 @@ router.post('/create-checkout-session', async (req, res) => {
     const sessionCreatePaylod = {
       payment_method_types: ['card'],
       allow_promotion_codes: true,
-      metadata : {
-        creditIncrement : prices[planId].creditIncrement
-      },
+      
       line_items: [
         {
           price_data: {
@@ -70,6 +68,9 @@ router.post('/create-checkout-session', async (req, res) => {
             product_data: {
               name: prices[planId].name,
               description: prices[planId].description,
+              metadata : {
+                creditIncrement : prices[planId].creditIncrement
+              },
             },
             unit_amount: prices[planId].price,
             recurring: prices[planId].mode === 'subscription' ? { interval: 'month' } : undefined, // Add recurring for subscriptions
