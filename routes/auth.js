@@ -90,12 +90,22 @@ router.post('/token-check', authenticate, async (req, res) => {
       return res.status(401).json({ error: 'Session expired. Please log in again.' });
     }
 
+    // Retrieve user information, including role
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true }, // Assuming 'role' exists in your User model
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
     // Refresh the token if it's close to expiry (e.g., less than 15 minutes left)
     const timeLeft = session.expiry - now;
     const fifteenMinutes = 15 * 60 * 1000;
     if (timeLeft < fifteenMinutes) {
       // Generate a new token
-      const newToken = jwt.sign({ userId }, process.env.JWT_SECRET, {
+      const newToken = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET, {
         expiresIn: '1h',
       });
 
@@ -109,17 +119,18 @@ router.post('/token-check', authenticate, async (req, res) => {
         },
       });
 
-      // Return the new token
+      // Return the new token 
       return res.json({ token: newToken });
     }
 
-    // Token is still good, return current token
+    // Token is still good, return current 
     res.json({ token });
   } catch (err) {
     console.error('Token check error:', err);
     res.status(500).json({ error: 'Failed to check token.' });
   }
 });
+
 
 // Request Password Reset
 router.post('/request-reset', async (req, res) => {
