@@ -24,6 +24,8 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' }); // Do not reveal if email or password is wrong
     }
 
+    // console.log(user)
+
     // Compare the provided password with the hashed password in the database
     const isMatch = await bcrypt.compare(password, user.passwordHash);
 
@@ -33,7 +35,7 @@ router.post('/login', async (req, res) => {
 
     // Generate a JWT token
     const token = jwt.sign(
-      { id: user.id, email: user.email, isAdmin: user.isAdmin },
+      { id: user.id, email: user.email, isAdmin: user.isAdmin, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
@@ -59,7 +61,7 @@ router.post('/login', async (req, res) => {
 router.post('/token-check', authenticate, async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   const userId = req.user.id; // Adjusted from req.user.userId
-  console.log('Token check:');
+  // console.log('Token check:');
   console.log('Token:', token, 'UserID:', userId);
 
   try {

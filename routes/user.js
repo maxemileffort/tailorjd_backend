@@ -10,7 +10,7 @@ const prisma = new PrismaClient();
 
 // Get demographics for the authenticated user
 router.get('/demographics', authenticate, async (req, res) => {
-  console.log(req.body);
+  // console.log(req.body);
   try {
     const demographics = await prisma.demographics.findUnique({
       where: { userId: req.user.id },
@@ -112,7 +112,7 @@ router.post('/', async (req, res) => {
 // Update demographics for the authenticated user
 router.put('/demographics', authenticate, async (req, res) => {
   const { f_name, l_name, jd_target, currentIndustry, currentResume } = req.body;
-  console.log(req.body);
+  // console.log(req.body);
   try {
     const updatedDemographics = await prisma.demographics.upsert({
       where: { userId: req.user.id },
