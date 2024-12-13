@@ -425,4 +425,32 @@ router.get('/doc-collections', authenticate, async (req, res) => {
     }
   });
 
+  router.put('/doc-collections/update', authenticate, async (req, res) => {
+    const { id, newName } = req.body;
+  
+    // Validate input
+    if (!id || !newName) {
+      return res.status(400).json({ error: 'ID and newName are required.' });
+    }
+  
+    try {
+      // Update the collection name in the database
+      const updatedCollection = await prisma.docCollection.update({
+        where: { id },
+        data: { collectionName: newName },
+      });
+  
+      res.json({ success: true, updatedCollection });
+    } catch (error) {
+      console.error('Error updating collection name:', error);
+  
+      if (error.code === 'P2025') {
+        // Prisma-specific error code for "record not found"
+        return res.status(404).json({ error: 'Collection not found.' });
+      }
+  
+      res.status(500).json({ error: 'An error occurred while updating the collection name.' });
+    }
+  });
+
 module.exports = router;
