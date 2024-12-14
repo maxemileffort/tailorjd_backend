@@ -60,18 +60,30 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
+  // create anyone wth @tailorjd.com in email as admin
+  const createAsAdmin = email.includes('@tailorjd.com');
+
   try {
     // Hash the password with a salt factor of 10
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    const newUser = await prisma.user.create({
-      data: { email, passwordHash: hashedPassword }, // Store hashed password
-    });
+    let newUser;
+    if(createAsAdmin){
+      const role = 'ADMIN';
+      newUser = await prisma.user.create({
+        data: { email, role, passwordHash: hashedPassword }, // Store hashed password
+      });
+    } else {
+      // role defaults to 'USER'
+      newUser = await prisma.user.create({
+        data: { email, passwordHash: hashedPassword }, // Store hashed password
+      });
+    }
 
     // Generate a JWT token
     const token = jwt.sign(
-      { id: newUser.id, email: newUser.email, isAdmin: newUser.isAdmin },
+      { id: newUser.id, email: newUser.email, role: newUser.role },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
