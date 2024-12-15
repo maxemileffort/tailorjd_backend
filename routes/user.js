@@ -3,6 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const nodemailer = require('nodemailer');
 const { authenticate, isAdmin } = require('../middleware/auth');
+const { createPortalSession } = require('../services/billingHelpers');
 const jwt = require('jsonwebtoken');
 
 const router = express.Router();
@@ -15,16 +16,50 @@ router.get('/demographics', authenticate, async (req, res) => {
     const demographics = await prisma.demographics.findUnique({
       where: { userId: req.user.id },
     });
-
+    
     if (!demographics) {
       return res.status(404).json({ error: 'Demographics not found' });
     }
-
+    
     res.status(200).json(demographics);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch demographics' });
   }
 });
+
+router.get("/billing", authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'Invalid parameters: userId must be defined.' });
+    }
+
+    const userData = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!userData) {
+      console.log('Unable to find user.');
+      return res.status(404).json({ error: 'Unable to find user.' });
+    }
+
+    const stripeId = userData.stripeCustomerId;
+
+    try {
+      const portalUrl = await createPortalSession(stripeId);
+      return res.status(200).json({ portalUrl });
+    } catch (error) {
+      console.error(`Error creating billing portal session for stripeCustomerId ${stripeId}:`, error);
+      return res.status(500).json({ error: 'Error creating billing portal session.' });
+    }
+    
+  } catch (error) {
+    console.error('Unexpected error:', error);
+    return res.status(500).json({ error: 'An unexpected error occurred.' });
+  }
+});
+
 
 // Get all users (admin only)
 router.get('/', authenticate, isAdmin, async (req, res) => {
@@ -55,19 +90,19 @@ router.get('/:id', authenticate, async (req, res) => {
 // Create a new user
 router.post('/', async (req, res) => {
   const { email, password } = req.body; // Expect plain password, not hashed
-
+  
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
-
+  
   // create anyone wth @tailorjd.com in email as admin
   const createAsAdmin = email.includes('@tailorjd.com');
-
+  
   try {
     // Hash the password with a salt factor of 10
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
-
+    
     let newUser;
     if(createAsAdmin){
       const role = 'ADMIN';
@@ -80,35 +115,35 @@ router.post('/', async (req, res) => {
         data: { email, passwordHash: hashedPassword }, // Store hashed password
       });
     }
-
+    
     // Generate a JWT token
     const token = jwt.sign(
       { id: newUser.id, email: newUser.email, role: newUser.role },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
-
+    
     // Send Email
-  const transporter = nodemailer.createTransport({
-    service: process.env.EMAIL_SERVICE,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: Buffer.from(process.env.EMAIL_PASS, 'base64').toString('utf-8'),
-    },
-  });
-
-  const mailOptions = {
-    to: email,
-    from: "TailorJD",
-    subject: 'TailorJD - First Time Login',
-    text: `Hi there!\n\nThanks for signing up! To claim your free credits, all you have to do is use the email and password you signed up with to login after you get to the login page, which is here: ${process.env.FRONTEND_URL}/login \n\nEnjoy your 5 free resumes, on us! \n\nSee you in the inside. \n\n- Team TJD`,
-  };
-
-  transporter.sendMail(mailOptions, (error, info) => {
-    if (error) return res.status(500).send(error.toString());
-    res.send('Password reset link sent to your email. You should receive it in the next 5-10 minutes.');
-  });
-
+    const transporter = nodemailer.createTransport({
+      service: process.env.EMAIL_SERVICE,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: Buffer.from(process.env.EMAIL_PASS, 'base64').toString('utf-8'),
+      },
+    });
+    
+    const mailOptions = {
+      to: email,
+      from: "TailorJD",
+      subject: 'TailorJD - First Time Login',
+      text: `Hi there!\n\nThanks for signing up! To claim your free credits, all you have to do is use the email and password you signed up with to login after you get to the login page, which is here: ${process.env.FRONTEND_URL}/login \n\nEnjoy your 5 free resumes, on us! \n\nSee you in the inside. \n\n- Team TJD`,
+    };
+    
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) return res.status(500).send(error.toString());
+      res.send(`Confirmation email sent to ${email}. You should receive it in the next 5-10 minutes.`);
+    });
+    
     res.status(201).json({ token });
   } catch (err) {
     console.error(err);
@@ -144,7 +179,7 @@ router.put('/demographics', authenticate, async (req, res) => {
         currentResume,
       },
     });
-
+    
     res.status(200).json(updatedDemographics);
   } catch (err) {
     console.error('Error updating demographics:', err);
@@ -155,7 +190,7 @@ router.put('/demographics', authenticate, async (req, res) => {
 // Update a user
 router.put('/:id', authenticate, async (req, res) => {
   const { email, passwordHash, isSubscribed, isAdmin } = req.body;
-
+  
   try {
     const updatedUser = await prisma.user.update({
       where: { id: req.params.id },

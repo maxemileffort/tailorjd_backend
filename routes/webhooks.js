@@ -148,11 +148,12 @@ async function handleChargeSucceeded(charge) {
       products: products // Include detailed product info
     };
     
-    
+    // give them their credits and make sure their id exists in our database
     const amount = invoiceDetails.products[0].creditIncrement;
     const qty = invoiceDetails.products[0].quantity;
     const finalAmt = amount * qty;
     await updateUserCredits(user.id, finalAmt, 'increment');
+    await updateCustId(user.id, invoice.customer);
 
     await prisma.activityLog.create({
       data: {
@@ -231,6 +232,7 @@ async function handleCheckoutSessionCompleted(session) {
     const qty = sessionDetails.products[0].quantity;
     const finalAmt = amount * qty;
     // await updateUserCredits(user.id, finalAmt, 'increment');
+    await updateCustId(user.id, invoice.customer);
 
     await prisma.activityLog.create({
       data: {
@@ -306,6 +308,8 @@ async function handlePaymentSucceeded(invoice) {
     const amount = invoiceDetails.creditIncrement;
     const qty = invoiceDetails.qty;
     const finalAmt = amount * qty;
+
+    await updateCustId(user.id, invoice.customer);
 
     console.log(`finalAmt: ${finalAmt}`);
     console.log(`invoiceDetails: ${JSON.stringify(invoiceDetails)}`);

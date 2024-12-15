@@ -3,8 +3,6 @@ const { PrismaClient } = require('@prisma/client');
 const { authenticate } = require('../middleware/auth'); 
 const { updateUserCredits, fetchUserCredits } = require('../services/credits');
 
-// Example usage
-
 const router = express.Router();
 const prisma = new PrismaClient();
 
