@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { PrismaClient } = require('@prisma/client');
 
 let stripeKey;
 if(process.env.PROD==="true"){
@@ -10,9 +11,11 @@ if(process.env.PROD==="true"){
 
 const stripe = require('stripe')(stripeKey);
 
+const prisma = new PrismaClient();
+
 router.post('/create-checkout-session', async (req, res) => {
   try {
-    const { planId } = req.body; // Receive the plan identifier from the frontend
+    const { planId, userId } = req.body; // Receive the plan identifier from the frontend
     
     // Match planId to pricing in your database or code
     const prices = {
@@ -22,45 +25,57 @@ router.post('/create-checkout-session', async (req, res) => {
         name: 'Standard Plan Subscription',
         description: '5 credits / month (Renews every 30 days)',
         mode: 'subscription'
-     },
+      },
       silver: { 
         price: 2500, 
         creditIncrement: 50, 
         name: 'Silver Plan Subscription',
         description: '50 credits / month (Renews every 30 days)',
         mode: 'subscription'
-     },
+      },
       gold: { 
         price: 5000, 
         creditIncrement: 150, 
         name: 'Gold Plan Subscription',
         description: '150 credits / month (Renews every 30 days)',
         mode: 'subscription'
-     },
+      },
       alacarte10: { 
         price: 1200, 
         creditIncrement: 10, 
         name: 'Credit 10 Pack',
         description: '10 credits (One time payment)',
         mode: 'payment'
-     },
+      },
       alacarte50: { 
         price: 5000,
         creditIncrement: 50, 
         name: 'Credit 50 Pack',
         description: '50 credits (One time payment)',
         mode: 'payment'
-     },
+      },
     };
-
+    
     if (!prices[planId]) {
       return res.status(400).json({ error: 'Invalid plan ID' });
     }
-
+    
+    // if an userId came with the request, find the corresponding 
+    // stripe Id and pass it in
+    let stripeId;
+    if (userId){
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+      
+      stripeId = user.stripeCustomerId
+    }
+    
+    
     const sessionCreatePaylod = {
       payment_method_types: ['card'],
       allow_promotion_codes: true,
-      
+      customer: stripeId,
       line_items: [
         {
           price_data: {
@@ -83,14 +98,14 @@ router.post('/create-checkout-session', async (req, res) => {
       success_url: `${process.env.FRONTEND_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.FRONTEND_URL}/pricing`,
     }
-
+    
     if (prices[planId].mode === 'payment'){
       // Subs auto invoice, while payments don't. We depend on the invoice
       // to correctly increment credits, so this MUST be attached when 
       // possible.
       sessionCreatePaylod['invoice_creation'] = { enabled: true }
     }
-
+    
     const session = await stripe.checkout.sessions.create(sessionCreatePaylod);
     
     res.status(200).json({ id: session.id });
@@ -102,19 +117,19 @@ router.post('/create-checkout-session', async (req, res) => {
 
 router.get('/get-session-details', async (req, res) => {
   const { session_id } = req.query;
-
+  
   // Validate that session_id is provided
   if (!session_id) {
     return res.status(400).json({ error: 'Missing session_id in request' });
   }
-
+  
   try {
     // Retrieve the Stripe checkout session
     const session = await stripe.checkout.sessions.retrieve(session_id);
-
+    
     // Use session to pull invoice information.
     const invoice = await stripe.invoices.retrieve(session.invoice);
-
+    
     // From the invoice, pull product & customer information.
     const products = await Promise.all(invoice.lines.data.map(async (lineItem) => {
       if (lineItem.plan){
@@ -139,7 +154,7 @@ router.get('/get-session-details', async (req, res) => {
         };
       }
     }));
-
+    
     // Assign those to sessionDetails
     const sessionDetails = {
       creditIncrement: session.metadata.creditIncrement || 'Unknown Plan',
@@ -149,9 +164,9 @@ router.get('/get-session-details', async (req, res) => {
       products: products // Include detailed product info
     };
     
-
+    
     // console.log(`sessionDetails: ${JSON.stringify(sessionDetails)}`);
-
+    
     // Return session details to the client
     res.json(sessionDetails);
   } catch (error) {

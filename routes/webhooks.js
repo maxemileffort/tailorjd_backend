@@ -35,20 +35,20 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
   // Handle the event
   switch (event.type) {
     case 'charge.succeeded':
-      // Allocate credits for successful one-time or initial subscription purchases
-      await handleChargeSucceeded(event.data.object);
-      break;
+    // Allocate credits for successful one-time or initial subscription purchases
+    await handleChargeSucceeded(event.data.object);
+    break;
     case 'checkout.session.completed':
-      // Allocate credits for successful one-time or initial subscription purchases
-      await handleCheckoutSessionCompleted(event.data.object);
-      break;
+    // Allocate credits for successful one-time or initial subscription purchases
+    await handleCheckoutSessionCompleted(event.data.object);
+    break;
     case 'invoice.payment_succeeded':
-      // Allocate credits for recurring subscription renewals
-      await handlePaymentSucceeded(event.data.object);
-      break;
+    // Allocate credits for recurring subscription renewals
+    await handlePaymentSucceeded(event.data.object);
+    break;
     case 'invoice.payment_failed':
-      await handlePaymentFailed(event.data.object);
-      break;
+    await handlePaymentFailed(event.data.object);
+    break;
     default:
     console.log(`Unhandled event type ${event.type}`);
   }
@@ -61,7 +61,7 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
 async function handleChargeSucceeded(charge) {
   
   let user;
-
+  
   try {
     // Use charge to pull invoice information.
     const invoice = await stripe.invoices.retrieve(charge.invoice);
@@ -87,15 +87,27 @@ async function handleChargeSucceeded(charge) {
       });
       
       console.log(`New user created with email: ${invoice.customer_email}`);
-
+      
       // Send Email
-      const transporter = nodemailer.createTransport({
-        service: process.env.EMAIL_SERVICE,
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: Buffer.from(process.env.EMAIL_PASS, 'base64').toString('utf-8'),
-        },
-      });
+      let transporter;
+      if (process.env.EMAIL_SERVICE === 'gmail'){
+        transporter = nodemailer.createTransport({
+          service: process.env.EMAIL_SERVICE,
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: Buffer.from(process.env.EMAIL_PASS, 'base64').toString('utf-8'),
+          },
+        });
+      } else {
+        transporter = nodemailer.createTransport({
+          host: process.env.EMAIL_HOST,
+          port: process.env.EMAIL_PORT,
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+          },
+        });
+      }
       
       const mailOptions = {
         to: invoice.customer_email,
@@ -116,7 +128,7 @@ async function handleChargeSucceeded(charge) {
       transporter.sendMail(mailOptions, (error, info) => {
         if (error) return res.status(500).send(error.toString());
       });
-
+      
       // Log the event in the ActivityLog table
       await prisma.activityLog.create({
         data: {
@@ -155,7 +167,7 @@ async function handleChargeSucceeded(charge) {
     const finalAmt = amount * qty;
     await updateUserCredits(user.id, finalAmt, 'increment');
     await updateCustId(user.id, invoice.customer);
-
+    
     await prisma.activityLog.create({
       data: {
         userId: user.id,
@@ -166,7 +178,7 @@ async function handleChargeSucceeded(charge) {
     
   } catch (err) {
     console.error('Failed to process payment succeeded event:', err.message);
-
+    
     await prisma.activityLog.create({
       data: {
         userId: user.id,
@@ -234,7 +246,7 @@ async function handleCheckoutSessionCompleted(session) {
     const finalAmt = amount * qty;
     // await updateUserCredits(user.id, finalAmt, 'increment');
     await updateCustId(user.id, invoice.customer);
-
+    
     await prisma.activityLog.create({
       data: {
         userId: user.id,
@@ -265,9 +277,9 @@ async function handleCheckoutSessionCompleted(session) {
 }
 
 async function handlePaymentSucceeded(invoice) {
-
+  
   let user;
-
+  
   try {
     
     // From the invoice, pull product & customer information.
@@ -309,18 +321,18 @@ async function handlePaymentSucceeded(invoice) {
     const amount = invoiceDetails.creditIncrement;
     const qty = invoiceDetails.qty;
     const finalAmt = amount * qty;
-
+    
     await updateCustId(user.id, invoice.customer);
-
+    
     console.log(`finalAmt: ${finalAmt}`);
     console.log(`invoiceDetails: ${JSON.stringify(invoiceDetails)}`);
-
+    
     if (!invoice.charge){
       console.log('100% off coupon applied. Updating credits. -MW')
       await updateUserCredits(user.id, finalAmt, 'increment');
     }
     
-
+    
     await prisma.activityLog.create({
       data: {
         userId: user.id,
@@ -335,7 +347,7 @@ async function handlePaymentSucceeded(invoice) {
     
   } catch (err) {
     console.error('Failed to process payment succeeded event:', err.message);
-
+    
     await prisma.activityLog.create({
       data: {
         userId: user.id,
@@ -352,10 +364,10 @@ async function handlePaymentSucceeded(invoice) {
 
 async function handlePaymentFailed(invoice) {
   console.log('Payment failed:', invoice.id);
-
+  
   
   let user;
-
+  
   
   try {
     // Find the user based on the customer email
