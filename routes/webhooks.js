@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const nodemailer = require('nodemailer');
 const { PrismaClient } = require('@prisma/client');
 const { updateUserCredits } = require('../services/credits');
+const { updateCustId } = require('../services/billingHelpers')
 
 let stripeKey, endpointSecret;
 if(process.env.PROD==="true"){
