@@ -26,6 +26,7 @@ router.post('/', async (req, res) => {
       transporter = nodemailer.createTransport({
         host: process.env.EMAIL_HOST,
         port: process.env.EMAIL_PORT,
+        secure: true,
         auth: {
           user: process.env.EMAIL_USER,
           pass: process.env.EMAIL_PASS,
@@ -37,7 +38,7 @@ router.post('/', async (req, res) => {
     
     // Compose the email
     const mailOptions = {
-      from: `"Contact Us Form" <${email}>`,
+      from: `"Contact Us Form" <${process.env.EMAIL_USER}>`,
       to: process.env.EMAIL_USER, // Your support email
       subject: `New Contact Us Message: ${subject}`,
       text: `From: ${name}\nEmail: ${email}\n\nMessage:\n${message}`,

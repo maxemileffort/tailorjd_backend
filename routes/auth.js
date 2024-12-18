@@ -165,6 +165,7 @@ router.post('/request-reset', async (req, res) => {
     transporter = nodemailer.createTransport({
       host: process.env.EMAIL_HOST,
       port: process.env.EMAIL_PORT,
+      secure: true,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
@@ -173,7 +174,7 @@ router.post('/request-reset', async (req, res) => {
   }
   const mailOptions = {
     to: email,
-    from: "TailorJD",
+    from: `TailorJD <${process.env.EMAIL_USER}>`,
     subject: 'TailorJD - Password Reset',
     text: `Click this link to reset your password: ${process.env.FRONTEND_URL}/reset/${token}`,
   };

@@ -102,6 +102,7 @@ async function handleChargeSucceeded(charge) {
         transporter = nodemailer.createTransport({
           host: process.env.EMAIL_HOST,
           port: process.env.EMAIL_PORT,
+          secure: true,
           auth: {
             user: process.env.EMAIL_USER,
             pass: process.env.EMAIL_PASS,
@@ -111,7 +112,7 @@ async function handleChargeSucceeded(charge) {
       
       const mailOptions = {
         to: invoice.customer_email,
-        from: "TailorJD",
+        from: `TailorJD <${process.env.EMAIL_USER}>`,
         subject: 'TailorJD - New Account Info',
         text: `Hi! \n\nThanks for your purchase. 
         \nYour credits are tied to the email that was used during checkout, 
