@@ -46,6 +46,11 @@ router.get("/billing", authenticate, async (req, res) => {
 
     const stripeId = userData.stripeCustomerId;
 
+    if (!stripeId) {
+      console.log('Unable to find stripeId for user.');
+      return res.status(404).json({ error: 'Unable to find stripe Id for user.' });
+    }
+
     try {
       const portalUrl = await createPortalSession(stripeId);
       return res.status(200).json({ portalUrl });

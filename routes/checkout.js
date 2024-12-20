@@ -15,8 +15,12 @@ const prisma = new PrismaClient();
 
 router.post('/create-checkout-session', async (req, res) => {
   try {
-    const { planId, userId } = req.body; // Receive the plan identifier from the frontend
-    
+    const { planId, userId, email } = req.body; // Receive email in the request
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
     // Match planId to pricing in your database or code
     const prices = {
       standard: { 
@@ -55,27 +59,54 @@ router.post('/create-checkout-session', async (req, res) => {
         mode: 'payment'
       },
     };
-    
+
     if (!prices[planId]) {
       return res.status(400).json({ error: 'Invalid plan ID' });
     }
-    
-    // if an userId came with the request, find the corresponding 
-    // stripe Id and pass it in
-    let stripeId;
-    if (userId){
-      const user = await prisma.user.findUnique({
+
+    let stripeCustomerId;
+    let user;
+
+    if (userId) {
+      user = await prisma.user.findUnique({
         where: { id: userId },
       });
-      
-      stripeId = user.stripeCustomerId
+      stripeCustomerId = user?.stripeCustomerId;
     }
-    
-    
-    const sessionCreatePaylod = {
+
+    if (!stripeCustomerId) {
+      // Search for an existing Stripe customer with the email
+      const existingCustomers = await stripe.customers.list({
+        email,
+        limit: 1,
+      });
+
+      if (existingCustomers.data.length > 0) {
+        stripeCustomerId = existingCustomers.data[0].id;
+      } else {
+        // Create a new Stripe customer
+        const customer = await stripe.customers.create({
+          email,
+          metadata: {
+            userId: user?.id || null, // Associate with user ID if available
+          },
+        });
+        stripeCustomerId = customer.id;
+
+        // Save the Stripe customer ID to database if userId is available
+        if (userId) {
+          await prisma.user.update({
+            where: { id: userId },
+            data: { stripeCustomerId },
+          });
+        }
+      }
+    }
+
+    const sessionCreatePayload = {
       payment_method_types: ['card'],
       allow_promotion_codes: true,
-      customer: stripeId,
+      customer: stripeCustomerId,
       line_items: [
         {
           price_data: {
@@ -83,37 +114,35 @@ router.post('/create-checkout-session', async (req, res) => {
             product_data: {
               name: prices[planId].name,
               description: prices[planId].description,
-              metadata : {
-                creditIncrement : prices[planId].creditIncrement
+              metadata: {
+                creditIncrement: prices[planId].creditIncrement,
               },
             },
             unit_amount: prices[planId].price,
-            recurring: prices[planId].mode === 'subscription' ? { interval: 'month' } : undefined, // Add recurring for subscriptions
+            recurring: prices[planId].mode === 'subscription' ? { interval: 'month' } : undefined,
           },
           quantity: 1,
-          adjustable_quantity: prices[planId].mode === 'payment' ? { enabled: true, minimum: 1, maximum: 10 } : undefined, // Enable adjustable quantity for one-time payments
+          adjustable_quantity: prices[planId].mode === 'payment' ? { enabled: true, minimum: 1, maximum: 10 } : undefined,
         },
       ],
-      mode: prices[planId].mode, // Ensure this matches either 'payment' or 'subscription'
+      mode: prices[planId].mode,
       success_url: `${process.env.FRONTEND_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.FRONTEND_URL}/pricing`,
+    };
+
+    if (prices[planId].mode === 'payment') {
+      sessionCreatePayload['invoice_creation'] = { enabled: true };
     }
-    
-    if (prices[planId].mode === 'payment'){
-      // Subs auto invoice, while payments don't. We depend on the invoice
-      // to correctly increment credits, so this MUST be attached when 
-      // possible.
-      sessionCreatePaylod['invoice_creation'] = { enabled: true }
-    }
-    
-    const session = await stripe.checkout.sessions.create(sessionCreatePaylod);
-    
+
+    const session = await stripe.checkout.sessions.create(sessionCreatePayload);
+
     res.status(200).json({ id: session.id });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to create checkout session' });
   }
 });
+
 
 router.get('/get-session-details', async (req, res) => {
   const { session_id } = req.query;
