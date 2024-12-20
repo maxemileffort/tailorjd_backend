@@ -220,6 +220,21 @@ router.put('/:id', authenticate, async (req, res) => {
   }
 });
 
+// Update a user
+router.put('/:id/role', authenticate, async (req, res) => {
+  const { role } = req.body;
+  
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { id: req.params.id },
+      data: { role },
+    });
+    res.json(updatedUser);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
 // Delete a user (admin only)
 router.delete('/:id', authenticate, isAdmin, async (req, res) => {
   try {

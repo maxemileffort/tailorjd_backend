@@ -33,7 +33,8 @@ const authenticate = async (req, res, next) => {
 };
 
 const isAdmin = (req, res, next) => {
-  if (!req.user || !req.user.isAdmin) {
+  if (!req.user || (!req.user.isAdmin && req.user.role !== 'ADMIN')) {
+    console.log(JSON.stringify(req.user));
     return res.status(403).json({ error: 'Forbidden' });
   }
   next();
