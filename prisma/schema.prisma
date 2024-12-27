@@ -85,6 +85,14 @@ model Sessions {
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
 
+model Jobs {
+  jobId             String        @id @default(uuid())
+  createdOn         DateTime      @default(now())
+  jobType           String
+  status            JobStatus      @default(PROCESSING)
+  completedOn       DateTime?
+}
+
 enum activityType {
   LOG
   ERROR
@@ -104,4 +112,10 @@ enum RoleType {
   WRITER
   ADMIN
   AFFILIATE
+}
+
+enum JobStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
 }
