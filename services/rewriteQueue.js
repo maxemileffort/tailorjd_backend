@@ -68,12 +68,12 @@ class SimpleRewriteQueue {
         const jobId = uuidv4();
         this.queue.push({ job, jobId });
         
-        // Insert a new job into the Jobs table with initial status as PROCESSING
+        // Insert a new job into the Jobs table 
+        // which defaults to PROCESSING.
         prisma.jobs.create({
             data: {
                 jobId: jobId,
-                jobType: "REWRITE", 
-                status: "PROCESSING",
+                jobType: job.jobType, 
             },
         }).catch(error => console.error('Error creating job record:', error));
 
@@ -122,7 +122,7 @@ class SimpleRewriteQueue {
                     data: {
                         userResume: userResume,
                         jd: jd,
-                        collectionName: `Rewrite - ${getCurrentDateTime()}`,
+                        collectionName: `${job.jobType} - ${getCurrentDateTime()}`,
                     },
                 });
                 
