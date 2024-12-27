@@ -61,7 +61,7 @@ async function callOpenAI(apiKey, model, messages) {
     
     const json = await response.json();
 
-    if (!response.choices) {
+    if (!json.choices) {
         throw new Error(`OpenAI API Error: Response is missing choices.`);
     }
 
