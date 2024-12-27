@@ -55,11 +55,16 @@ async function callOpenAI(apiKey, model, messages) {
     
     const response = await fetch(url, options);
     
-    if (!response.ok) {
-        throw new Error(`OpenAI API Error: ${response.status} - ${response.statusText}`);
-    }
+    // if (!response.ok) {
+    //     throw new Error(`OpenAI API Error: ${response.status} - ${response.statusText}`);
+    // }
     
     const json = await response.json();
+
+    if (!response.choices) {
+        throw new Error(`OpenAI API Error: Response is missing choices.`);
+    }
+
     return json.choices;
 }
 
