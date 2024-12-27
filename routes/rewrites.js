@@ -235,7 +235,31 @@ router.post('/draft', authenticate, async (req, res) => {
     // remove the extraneous text from the job descriptions.
     // this distills them to the significant parts for the AI to focus on.
     const jdArr = [...Object.values(req.body)];
-    for (const jd of jdArr) {
+    // for (const jd of jdArr) {
+    //     let conversation = [
+    //         {
+    //             role: 'system',
+    //             content: FINAL_SYSTEM_PROMPT,
+    //         },
+    //         {
+    //             role: 'user',
+    //             content: `${jd}` + TOKENIZE_PROMPT,
+    //         },
+    //     ];
+
+    //     try {
+    //         const tokenizeResponse = await callOpenAI(OPENAI_API_KEY, MODEL, conversation);
+    //         const tokenJd = tokenizeResponse[0]?.message?.content;
+
+    //         tokenJdArr.push(tokenJd);
+    //     } catch (error) {
+    //         console.error("Error calling OpenAI:", error);
+    //         res.status(500).json({ error: 'An error occurred while processing the request' });
+    //         return ;
+    //     }
+    // }
+
+    const promises = jdArr.map(async (jd) => {
         let conversation = [
             {
                 role: 'system',
@@ -246,18 +270,23 @@ router.post('/draft', authenticate, async (req, res) => {
                 content: `${jd}` + TOKENIZE_PROMPT,
             },
         ];
-
+    
         try {
             const tokenizeResponse = await callOpenAI(OPENAI_API_KEY, MODEL, conversation);
-            const tokenJd = tokenizeResponse[0]?.message?.content;
-
-            tokenJdArr.push(tokenJd);
+            return tokenizeResponse[0]?.message?.content; // Return the tokenJd for this promise
         } catch (error) {
             console.error("Error calling OpenAI:", error);
-            res.status(500).json({ error: 'An error occurred while processing the request' });
-            return ;
+            throw new Error('An error occurred while processing the request'); // Throw error to capture in Promise.all
         }
-    }
+    });
+    
+    try {
+        const tokenJdArr = await Promise.all(promises); // Execute all API calls in parallel
+    // } catch (error) {
+    //     console.error("One or more requests failed:", error.message);
+    //     res.status(500).json({ error: error.message });
+    // }
+    
 
     const [tokenJd1, tokenJd2, tokenJd3]  = tokenJdArr;
     let FINAL_DRAFT_PROMPT = `<job description 1>${tokenJd1}</job description 1>`;
@@ -265,7 +294,7 @@ router.post('/draft', authenticate, async (req, res) => {
     FINAL_DRAFT_PROMPT += `\n<job description 3>${tokenJd3}</job description 3>`;
     FINAL_DRAFT_PROMPT += '\n' + DRAFT_PROMPT;
     
-    try {
+    // try {
         // Step 1: Conversation Flow with OpenAI
         // Initial conversation with OpenAI
         let conversation = [
@@ -285,7 +314,7 @@ router.post('/draft', authenticate, async (req, res) => {
          const collection = await prisma.docCollection.create({
             data: {
                 userResume: user_resume.replace('```markdown', "").replace('```', ""),
-                jd: "JD1:\n\n" + tokenJd1 + "JD2:\n\n" + tokenJd2 + "JD3:\n\n" + tokenJd3,
+                jd: "JD1:\n\n" + tokenJd1 + "\n\nJD2:\n\n" + tokenJd2 + "\n\nJD3:\n\n" + tokenJd3,
                 collectionName: "Draft - " + getCurrentDateTime(),
             },
         });
