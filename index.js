@@ -13,6 +13,7 @@ const webhookRoutes = require('./routes/webhooks'); // Only for signing Stripe t
 const creditsRoutes = require('./routes/credits'); // Only monitors credit balances; no logic for money handling
 const createCheckoutSession = require('./routes/checkout'); // checkouts and sessions related to checkouts
 const contactRoutes = require('./routes/contact');
+const articleRoutes = require('./routes/article'); // Import article routes
 
 const sanitizeInput = require('./middleware/sanitizeInput');
 
@@ -73,6 +74,7 @@ app.use('/api/rewrites', rewriteRoutes); // Handles processing of JDs and Resume
 app.use('/api/credits', creditsRoutes); // Handles credits logic
 app.use('/api/checkouts', createCheckoutSession); // only checkouts
 app.use('/api/contact', contactRoutes); // Handles contact form submisions
+app.use('/api/articles', articleRoutes); // for rendering blog articles
 
 // Error handling middleware
 app.use((err, req, res, next) => {

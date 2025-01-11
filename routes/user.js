@@ -65,6 +65,22 @@ router.get("/billing", authenticate, async (req, res) => {
   }
 });
 
+// Get all users (admin only)
+router.get('/writers', authenticate, async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        role: {
+          in: ['ADMIN', 'WRITER'],
+        },
+      },
+    });
+    
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
 
 // Get all users (admin only)
 router.get('/', authenticate, isAdmin, async (req, res) => {
@@ -75,6 +91,8 @@ router.get('/', authenticate, isAdmin, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch users' });
   }
 });
+
+
 
 // Get a single user by ID
 router.get('/:id', authenticate, async (req, res) => {

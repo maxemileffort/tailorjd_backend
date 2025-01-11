@@ -8,22 +8,29 @@ datasource db {
 }
 
 model User {
-  id                String         @id @default(uuid())
-  email             String         @unique
-  passwordHash      String
-  isSubscribed      Boolean        @default(false)
-  isAdmin           Boolean        @default(false)
-  role              RoleType       @default(USER)
-  creditBalance     Int            @default(5)
-  stripeCustomerId  String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  resetToken        String? 
-  resetTokenExpiry  DateTime?
-  docs              Docs[]
-  ActivityLog       ActivityLog[]
-  Demographics      Demographics[]
-  Sessions          Sessions[]
+  id               String    @id @default(uuid())
+  email            String    @unique
+  passwordHash     String
+  isSubscribed     Boolean   @default(false)
+  isAdmin          Boolean   @default(false)
+  role             RoleType  @default(USER)
+  creditBalance    Int       @default(5)
+  stripeCustomerId String?
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  isEmailVerified  Boolean   @default(false) // New: Tracks email verification status
+  lastLogin        DateTime? // New: Tracks the last time the user logged in
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime? // New: For soft deletion
+
+  // Relations
+  docs         Docs[]
+  ActivityLog  ActivityLog[]
+  Demographics Demographics[]
+  Sessions     Sessions[]
+
+  Article Article[]
 }
 
 model Demographics {
@@ -38,29 +45,29 @@ model Demographics {
 }
 
 model Docs {
-  id             String   @id @default(uuid())
-  userId         String
-  docType        DocType
-  content        String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  collectionId   String  
-  collection     DocCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  id           String        @id @default(uuid())
+  userId       String
+  docType      DocType
+  content      String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  collectionId String
+  collection   DocCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model DocCollection {
-  id              String   @id @default(uuid())
-  analysis        String?
-  userResume      String
-  resumeRewrite   String?
-  coverLetter     String?
-  collectionName  String?
-  jd              String
-  createdAt       DateTime @default(now())
+  id             String   @id @default(uuid())
+  analysis       String?
+  userResume     String
+  resumeRewrite  String?
+  coverLetter    String?
+  collectionName String?
+  jd             String
+  createdAt      DateTime @default(now())
 
-  docs           Docs[] 
+  docs Docs[]
 }
 
 model ActivityLog {
@@ -75,22 +82,37 @@ model ActivityLog {
 }
 
 model Sessions {
-  id          String        @id @default(uuid())
-  createdOn   DateTime      @default(now())
-  expiry      DateTime 
-  token       String        @unique
-  isActive    Boolean       @default(true)
-  userId      String?
+  id        String   @id @default(uuid())
+  createdOn DateTime @default(now())
+  expiry    DateTime
+  token     String   @unique
+  isActive  Boolean  @default(true)
+  userId    String?
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
 
 model Jobs {
-  jobId             String        @id @default(uuid())
-  createdOn         DateTime      @default(now())
-  jobType           String
-  status            JobStatus      @default(PROCESSING)
-  completedOn       DateTime?
+  jobId       String    @id @default(uuid())
+  createdOn   DateTime  @default(now())
+  jobType     String
+  status      JobStatus @default(PROCESSING)
+  completedOn DateTime?
+}
+
+model Article {
+  id              String   @id @default(uuid())
+  title           String
+  content         String
+  authorId        String
+  author          User     @relation(fields: [authorId], references: [id])
+  metaTitle       String
+  metaDescription String
+  schemaMarkup    Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([title], map: "idx_article_title")
 }
 
 enum activityType {
