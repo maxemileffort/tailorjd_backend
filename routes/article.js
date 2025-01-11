@@ -1,15 +1,14 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
-const { authenticate, isAdmin } = require('../middleware/auth');
+const { authenticate, isAdmin, isAdminOrWriter } = require('../middleware/auth');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Get a single article by ID
-router.get('/:id', async (req, res) => {
+router.get('/:slug', async (req, res) => {
   try {
     const article = await prisma.article.findUnique({
-      where: { id: req.params.id },
+      where: { slug: req.params.slug },
       include: { author: true }, // Include author information
     });
     if (!article) {
@@ -54,10 +53,10 @@ router.get('/', async (req, res) => {
 
 // Create a new article (admin only)
 router.post('/', authenticate, isAdmin, async (req, res) => {
-  const { title, content, metaTitle, metaDescription, schemaMarkup } = req.body;
+  const { title, content, metaTitle, metaDescription, schemaMarkup, slug } = req.body;
 
-  if (!title || !content) {
-    return res.status(400).json({ error: 'Title and content are required.' });
+  if (!title || !content || !slug || !schemaMarkup) {
+    return res.status(400).json({ error: 'Title, slug, schema markup and content are required.' });
   }
 
   try {
@@ -67,6 +66,7 @@ router.post('/', authenticate, isAdmin, async (req, res) => {
         content,
         metaTitle,
         metaDescription,
+        slug,
         schemaMarkup,
         authorId: req.user.id, // Set the authenticated user as the author
       },
@@ -78,8 +78,8 @@ router.post('/', authenticate, isAdmin, async (req, res) => {
   }
 });
 
-// Update an article (admin only)
-router.put('/:id', authenticate, isAdmin, async (req, res) => {
+// Update an article (admin and writers only)
+router.put('/:id', authenticate, isAdminOrWriter, async (req, res) => {
   const { title, content, metaTitle, metaDescription, schemaMarkup } = req.body;
 
   try {

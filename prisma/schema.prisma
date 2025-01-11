@@ -103,6 +103,7 @@ model Jobs {
 model Article {
   id              String   @id @default(uuid())
   title           String
+  slug            String?  @unique @default(uuid())
   content         String
   authorId        String
   author          User     @relation(fields: [authorId], references: [id])

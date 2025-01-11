@@ -40,4 +40,12 @@ const isAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { authenticate, isAdmin };
+const isAdminOrWriter = (req, res, next) => {
+  if (!req.user || (['ADMIN', 'WRITER'].includes(req.user.role))) {
+    console.log(JSON.stringify(req.user));
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+};
+
+module.exports = { authenticate, isAdmin, isAdminOrWriter };
