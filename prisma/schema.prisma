@@ -15,7 +15,7 @@ model User {
   isAdmin          Boolean   @default(false)
   role             RoleType  @default(USER)
   creditBalance    Int       @default(5)
-  stripeCustomerId String?
+  stripeCustomerId String?   
   resetToken       String?
   resetTokenExpiry DateTime?
   isEmailVerified  Boolean   @default(false) // New: Tracks email verification status

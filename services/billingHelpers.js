@@ -56,7 +56,7 @@ const createPortalSession = async (stripeId) => {
 
     try {
         // Fetch the user's credit balance and check if the user exists
-        const userData = await prisma.user.findUnique({
+        const userData = await prisma.user.findFirst({
             where: { stripeCustomerId: stripeId },
         });
 
