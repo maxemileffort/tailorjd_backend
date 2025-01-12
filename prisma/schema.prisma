@@ -102,13 +102,13 @@ model Jobs {
 
 model Article {
   id              String   @id @default(uuid())
-  title           String
-  slug            String?  @unique @default(uuid())
+  title           String   @length(min: 1, max: 255)
+  slug            String   @unique @default(uuid())
   content         String
   authorId        String
   author          User     @relation(fields: [authorId], references: [id])
-  metaTitle       String
-  metaDescription String
+  metaTitle       String  @length(max: 60)
+  metaDescription String  @length(max: 160)
   schemaMarkup    Json
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
