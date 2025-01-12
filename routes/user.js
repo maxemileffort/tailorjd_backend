@@ -9,6 +9,15 @@ const jwt = require('jsonwebtoken');
 const router = express.Router();
 const prisma = new PrismaClient();
 
+let stripeKey;
+if(process.env.PROD==="true"){
+  stripeKey = (process.env.STRIPE_SECRET_KEY);
+} else {
+  stripeKey = (process.env.STRIPE_TEST_SECRET_KEY);
+}
+
+const stripe = require('stripe')(stripeKey);
+
 // Get demographics for the authenticated user
 router.get('/demographics', authenticate, async (req, res) => {
   // console.log(req.body);
@@ -31,24 +40,51 @@ router.get("/billing", authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    if (!userId) {
-      return res.status(400).json({ error: 'Invalid parameters: userId must be defined.' });
-    }
+    // Handled by authenticate middleware
+    // if (!userId) {
+    //   return res.status(400).json({ error: 'Invalid parameters: userId must be defined.' });
+    // }
 
-    const userData = await prisma.user.findUnique({
-      where: { id: userId },
-    });
+    // const userData = await prisma.user.findUnique({
+    //   where: { id: userId },
+    // });
+
+    // Handle potential database errors separately
+    let userData;
+    try {
+      userData = await prisma.user.findUnique({ where: { id: userId } });
+    } catch (error) {
+      console.error('Database error:', error);
+      return res.status(500).json({ error: 'Internal server error.' });
+    }
 
     if (!userData) {
       console.log('Unable to find user.');
-      return res.status(404).json({ error: 'Unable to find user.' });
+      return res.status(400).json({ error: 'Unable to find user.' });
     }
 
-    const stripeId = userData.stripeCustomerId;
+    let stripeId = userData.stripeCustomerId;
 
+    // Check if Stripe ID exists
     if (!stripeId) {
-      console.log('Unable to find stripeId for user.');
-      return res.status(404).json({ error: 'Unable to find stripe Id for user.' });
+      console.log('No Stripe ID found for user, creating one...');
+      try {
+        // Create a new Stripe customer
+        const customer = await stripe.customers.create({
+          email: userData.email, // Assuming you have user's email
+        });
+
+        // Save the newly created Stripe ID in your database
+        await prisma.user.update({
+          where: { id: userId },
+          data: { stripeCustomerId: customer.id },
+        });
+
+        stripeId = customer.id; // Update with the newly created Stripe ID
+      } catch (error) {
+        console.error('Error creating Stripe customer:', error);
+        return res.status(500).json({ error: 'Failed to create Stripe customer.' });
+      }
     }
 
     try {
@@ -107,9 +143,6 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-
-
-
 // Create a new user
 router.post('/', async (req, res) => {
   const { email, password } = req.body; // Expect plain password, not hashed
@@ -120,24 +153,33 @@ router.post('/', async (req, res) => {
   
   // create anyone wth @tailorjd.com in email as admin
   const createAsAdmin = email.includes('@tailorjd.com');
+
+  // Assign stripe customer ID at signup in order to make upgrades easier
+  const customer = await stripe.customers.create({
+    email,
+    metadata: {
+      accountType: 'free',   // Track the account type
+    },
+  });
+
+  const stripeCustomerId = customer.id;
   
   try {
     // Hash the password with a salt factor of 10
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
     
-    let newUser;
+    let role;
     if(createAsAdmin){
-      const role = 'ADMIN';
-      newUser = await prisma.user.create({
-        data: { email, role, passwordHash: hashedPassword }, // Store hashed password
-      });
+      role = 'ADMIN';
     } else {
       // role defaults to 'USER'
-      newUser = await prisma.user.create({
-        data: { email, passwordHash: hashedPassword }, // Store hashed password
-      });
+      role = 'USER';
     }
+
+    const newUser = await prisma.user.create({
+      data: { email, role, stripeCustomerId, passwordHash: hashedPassword }, // Store hashed password
+    });
     
     // Generate a JWT token
     const token = jwt.sign(
