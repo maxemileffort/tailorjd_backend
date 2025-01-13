@@ -1,9 +1,35 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authenticate, isAdmin, isAdminOrWriter } = require('../middleware/auth');
+const { generateUploadUrl, generateReadUrl, deleteFile } = require('../services/s3Services');
 
 const router = express.Router();
 const prisma = new PrismaClient();
+
+router.get('/s3-read-test', async (req, res) => {
+  const readUrl = await generateReadUrl('tjd+-+amelia+-+post.webp', 'images');
+  console.log('Read URL:', readUrl);
+  res.status(200).json(readUrl);
+});
+
+router.post('/s3-upload-test', async (req, res) => {
+  const uploadUrl2 = await generateUploadUrl('article1-img1.jpg', 'images');
+  console.log('Img Upload URL:', uploadUrl2);
+
+  res.status(200).json(uploadUrl2);
+});
+
+router.get('/s3-del-test', async (req, res) => {
+  await deleteFile('article1.html', 'images');
+  console.log('File deleted');
+  try {
+    const readUrl = await generateReadUrl('article1.html', 'articles');
+    console.log('Read URL:', readUrl);
+  } catch{
+    console.log("Can't find file maybe?")
+  }
+  res.status(200);
+});
 
 router.get('/:slug', async (req, res) => {
   try {
