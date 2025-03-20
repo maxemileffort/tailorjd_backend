@@ -57,6 +57,22 @@ if (isProd) {
   app.use(cors()); // Allow all origins
 }
 
+// Setting some required headers that I guess have been missing this whole time
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://tailorjd.com');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
+
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 200, // Limit each IP to 100 requests per windowMs
