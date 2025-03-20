@@ -49,7 +49,7 @@ if (isProd) {
         callback(new Error('Not allowed by CORS'));
       }
     },
-    credentials: true,
+    // credentials: true,
     methods: 'GET, POST, PUT, DELETE, OPTIONS',
     allowedHeaders: 'Origin, X-Requested-With, Content-Type, Accept, Authorization'
   }));
@@ -61,19 +61,19 @@ if (isProd) {
 }
 
 // Setting some required headers that I guess have been missing this whole time
-// app.use((req, res, next) => {
-//   res.header('Access-Control-Allow-Origin', 'https://tailorjd.com');
-//   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-//   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-//   res.header('Access-Control-Allow-Credentials', 'true');
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://tailorjd.com');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  // res.header('Access-Control-Allow-Credentials', 'true');
   
-//   // Handle preflight requests
-//   if (req.method === 'OPTIONS') {
-//     return res.sendStatus(204);
-//   }
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
 
-//   next();
-// });
+  next();
+});
 
 
 app.use(rateLimit({
