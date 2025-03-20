@@ -21,6 +21,7 @@ let FINAL_SYSTEM_PROMPT = (SYSTEM_PROMPT + GUARDRAIL_PROMPT1 + GUARDRAIL_PROMPT2
 let ANALYSIS_PROMPT = Buffer.from(process.env.ANALYSIS_PROMPT, 'base64').toString('utf-8') ;
 let COMPARE_PROMPT = Buffer.from(process.env.COMPARE_PROMPT, 'base64').toString('utf-8') ;
 let COVERLETTER_PROMPT = Buffer.from(process.env.COVERLETTER_PROMPT, 'base64').toString('utf-8') ;
+let BULLET_PROMPT = Buffer.from(process.env.BULLET_PROMPT, 'base64').toString('utf-8') ;
 
 // Prompts for Drafts
 let TOKENIZE_PROMPT = Buffer.from(process.env.TOKENIZE_PROMPT, 'base64').toString('utf-8') ;
@@ -334,6 +335,40 @@ router.put('/doc-collections/update', authenticate, async (req, res) => {
         
         res.status(500).json({ error: 'An error occurred while updating the collection name.' });
     }
+});
+
+router.post('/bulletRewrites', authenticate, async (req, res) => {
+    const { user_bullets } = req.body;
+    const userId = req.user.id;
+    
+    const creditBalance = await fetchUserCredits(userId);
+    if (!creditBalance || creditBalance <= 0) {
+        return res.status(400).json({ error: 'You have insufficient credits. Please buy more before trying again.' });
+    }
+    
+    if (!user_resume || !jd) {
+        return res.status(400).json({ error: 'User resume and job description are required' });
+    }
+
+    let conversation = [
+        {
+            role: 'system',
+            content: FINAL_SYSTEM_PROMPT,
+        },
+        {
+            role: "user",
+            content: `${BULLET_PROMPT}${user_bullets}`
+        }
+        
+    ]
+    
+    const response = callOpenAI(OPENAI_API_KEY, MODEL, conversation)
+    const bulletContent = response[0]?.message?.content
+    
+    // Respond immediately
+    return res.status(202).json({ 
+        bulletContent
+    });
 });
 
 router.post('/', authenticate, async (req, res) => {
