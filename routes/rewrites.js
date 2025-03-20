@@ -353,12 +353,12 @@ router.post('/bulletRewrites', authenticate, async (req, res) => {
         },
         {
             role: "user",
-            content: `${BULLET_PROMPT}${user_bullets}`
+            content: `${BULLET_PROMPT}\n\n${user_bullets}`
         }
         
     ]
     
-    const response = callOpenAI(OPENAI_API_KEY, MODEL, conversation)
+    const response = await callOpenAI(OPENAI_API_KEY, MODEL, conversation)
     const bulletContent = response[0]?.message?.content
     
     // Respond immediately
