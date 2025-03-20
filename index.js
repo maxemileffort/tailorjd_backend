@@ -50,6 +50,8 @@ if (isProd) {
       }
     }
   }));
+
+  app.options('*', cors());
 } else {
   // Development/Generic CORS configuration
   app.use(cors()); // Allow all origins
