@@ -345,10 +345,6 @@ router.post('/bulletRewrites', authenticate, async (req, res) => {
     if (!creditBalance || creditBalance <= 0) {
         return res.status(400).json({ error: 'You have insufficient credits. Please buy more before trying again.' });
     }
-    
-    if (!user_resume || !jd) {
-        return res.status(400).json({ error: 'User resume and job description are required' });
-    }
 
     let conversation = [
         {
