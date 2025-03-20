@@ -29,52 +29,27 @@ app.use(helmet());
 const isProd = process.env.PROD === 'true' || process.env.PROD === true;
 
 if (isProd) {
-  // Production-specific CORS configuration
-  const allowedOrigins = [
-    'https://tailorjd.com',
-    // 'https://example.com',
-    // 'https://another-example.com',
-    // 'https://yetanother-example.com',
-    // 'http://192.168.1.1', // Example IP address
-    // 'http://192.168.1.2', // Another IP address
-    // 'http://192.168.1.3'  // Yet another IP address
-  ];
+  const allowedOrigins = ['https://tailorjd.com'];
 
   app.use(cors({
-    origin: function(origin, callback) {
-      // Allow requests with no origin (like mobile apps, curl requests)
-      if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
       }
     },
-    credentials: true,
-    methods: 'GET, POST, PUT, DELETE, OPTIONS',
-    allowedHeaders: 'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+    credentials: true,  
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
   }));
 
-  app.options('*', cors());
-} else {
+  app.options('*', cors()); 
+}
+ else {
   // Development/Generic CORS configuration
   app.use(cors()); // Allow all origins
 }
-
-// Setting some required headers that I guess have been missing this whole time
-// app.use((req, res, next) => {
-//   res.header('Access-Control-Allow-Origin', '*');
-//   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-//   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-//   // res.header('Access-Control-Allow-Credentials', 'true');
-  
-//   // Handle preflight requests
-//   if (req.method === 'OPTIONS') {
-//     return res.sendStatus(204);
-//   }
-
-//   next();
-// });
-
 
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
