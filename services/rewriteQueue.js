@@ -167,7 +167,7 @@ class SimpleRewriteQueue {
                 const coverLetterDoc = await createDoc(userId, 'COVER_LETTER', coverLetterContent, collectionId);
                 
                 // Charge user a credit
-                await updateUserCredits(userId, 1, 'decrement');
+                await updateUserCredits(userId, 3, 'decrement');
 
                 // Update the job status to COMPLETED
                 await prisma.jobs.update({

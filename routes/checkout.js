@@ -25,35 +25,35 @@ router.post('/create-checkout-session', async (req, res) => {
     const prices = {
       standard: { 
         price: 500, 
-        creditIncrement: 5, 
+        creditIncrement: 50, 
         name: 'Standard Plan Subscription',
-        description: '5 credits / month (Renews every 30 days)',
+        description: '50 credits / month (Renews every 30 days)',
         mode: 'subscription'
       },
       silver: { 
         price: 2500, 
-        creditIncrement: 50, 
+        creditIncrement: 500, 
         name: 'Silver Plan Subscription',
-        description: '50 credits / month (Renews every 30 days)',
+        description: '500 credits / month (Renews every 30 days)',
         mode: 'subscription'
       },
       gold: { 
         price: 5000, 
-        creditIncrement: 150, 
+        creditIncrement: 1500, 
         name: 'Gold Plan Subscription',
-        description: '150 credits / month (Renews every 30 days)',
+        description: '1500 credits / month (Renews every 30 days)',
         mode: 'subscription'
       },
       alacarte10: { 
         price: 1200, 
-        creditIncrement: 10, 
+        creditIncrement: 100, 
         name: 'Credit 10 Pack',
         description: '10 credits (One time payment)',
         mode: 'payment'
       },
       alacarte50: { 
         price: 5000,
-        creditIncrement: 50, 
+        creditIncrement: 500, 
         name: 'Credit 50 Pack',
         description: '50 credits (One time payment)',
         mode: 'payment'

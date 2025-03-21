@@ -14,7 +14,7 @@ model User {
   isSubscribed     Boolean   @default(false)
   isAdmin          Boolean   @default(false)
   role             RoleType  @default(USER)
-  creditBalance    Int       @default(5)
+  creditBalance    Int       @default(20)
   stripeCustomerId String?   
   resetToken       String?
   resetTokenExpiry DateTime?

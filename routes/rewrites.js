@@ -267,8 +267,8 @@ router.post('/draft', authenticate, async (req, res) => {
             },
         });
         
-        // Charge user a credit
-        await updateUserCredits(req.user.id, 1, 'decrement');
+        // Draft takes 5 credits
+        await updateUserCredits(req.user.id, 5, 'decrement');
         
         // Step 4: Respond with the created collection and docs
         res.status(201).json({
@@ -360,6 +360,9 @@ router.post('/bulletRewrites', authenticate, async (req, res) => {
     
     const response = await callOpenAI(OPENAI_API_KEY, MODEL, conversation)
     const bulletContent = response[0]?.message?.content
+
+    // Bullet rewrites take 1 credit
+    await updateUserCredits(req.user.id, 1, 'decrement');
     
     // Respond immediately
     return res.status(202).json({ 
@@ -387,6 +390,10 @@ router.post('/', authenticate, async (req, res) => {
         jd,
         jobType: 'Rewrite',
     });
+
+    // Rewrites take 3 credits
+    // this happens in the rewriteQueue in /services/
+    // await updateUserCredits(req.user.id, 3, 'decrement');
     
     // Respond immediately
     return res.status(202).json({ 

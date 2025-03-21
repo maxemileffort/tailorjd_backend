@@ -214,7 +214,7 @@ router.post('/', async (req, res) => {
       to: email,
       from: `TailorJD <${process.env.EMAIL_USER}>`,
       subject: 'TailorJD - First Time Login',
-      text: `Hi there!\n\nThanks for signing up! To claim your free credits, all you have to do is use the email and password you signed up with to login after you get to the login page, which is here: ${process.env.FRONTEND_URL}/login \n\nEnjoy your 5 free resumes, on us! \n\nSee you in the inside. \n\n- Team TJD`,
+      text: `Hi there!\n\nThanks for signing up! To claim your free credits, all you have to do is use the email and password you signed up with to login after you get to the login page, which is here: ${process.env.FRONTEND_URL}/login \n\nEnjoy your 20 free credits, on us! \n\nSee you in the inside. \n\n- Team TJD`,
     };
     
     transporter.sendMail(mailOptions, (error, info) => {
