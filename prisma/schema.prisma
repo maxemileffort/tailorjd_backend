@@ -93,11 +93,12 @@ model Sessions {
 }
 
 model Jobs {
-  jobId       String    @id @default(uuid())
-  createdOn   DateTime  @default(now())
-  jobType     String
-  status      JobStatus @default(PROCESSING)
-  completedOn DateTime?
+  jobId           String    @id @default(uuid())
+  createdOn       DateTime  @default(now())
+  jobType         String
+  errorMessage    String?
+  status          JobStatus @default(PROCESSING)
+  completedOn     DateTime?
 }
 
 model Article {
