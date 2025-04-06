@@ -5,6 +5,10 @@ const nodemailer = require('nodemailer');
 const { authenticate, isAdmin } = require('../middleware/auth');
 const { createPortalSession } = require('../services/billingHelpers');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const pdfParse = require('pdf-parse');
+const mammoth = require('mammoth');
+const path = require('path');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -234,7 +238,84 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update demographics for the authenticated user
+// Configure multer for memory storage
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // Limit file size to 10MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF and DOCX files are allowed.'), false);
+    }
+  }
+});
+
+// Route to handle resume upload and parsing
+router.put('/resume/upload', authenticate, upload.single('resume'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded.' });
+  }
+
+  let extractedText = '';
+
+  try {
+    if (req.file.mimetype === 'application/pdf') {
+      const data = await pdfParse(req.file.buffer);
+      extractedText = data.text;
+    } else if (req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      const result = await mammoth.extractRawText({ buffer: req.file.buffer });
+      extractedText = result.value;
+    } else {
+      // This case should ideally be caught by fileFilter, but added for robustness
+      return res.status(400).json({ error: 'Unsupported file type.' });
+    }
+
+    if (!extractedText || extractedText.trim().length === 0) {
+        return res.status(400).json({ error: 'Could not extract text from the resume. Please ensure the file is not empty or corrupted.' });
+    }
+
+    // Update the user's demographics with the extracted resume text
+    const updatedDemographics = await prisma.demographics.upsert({
+      where: { userId: req.user.id },
+      create: {
+        userId: req.user.id,
+        currentResume: extractedText,
+        // Include other fields if necessary, potentially fetching existing ones first
+        // or setting defaults if creating a new record
+        f_name: '', // Default or fetch existing
+        l_name: '', // Default or fetch existing
+        jd_target: '', // Default or fetch existing
+        currentIndustry: '', // Default or fetch existing
+      },
+      update: {
+        currentResume: extractedText,
+      },
+      include: { // Include the user relation to potentially return updated user info if needed
+        user: true,
+      },
+    });
+
+    // Return only the relevant part, e.g., the updated resume text or the whole demographics object
+    res.status(200).json({
+        message: 'Resume uploaded and parsed successfully.',
+        resumeText: extractedText // Send back the parsed text
+        // or updatedDemographics: updatedDemographics // Send back the full updated object
+    });
+
+  } catch (error) {
+    console.error('Error processing resume upload:', error);
+    if (error.message.includes('Invalid file type')) {
+        return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: 'Failed to process resume file.' });
+  }
+});
+
+
+// Update demographics for the authenticated user (existing route)
 router.put('/demographics', authenticate, async (req, res) => {
   const { f_name, l_name, jd_target, currentIndustry, currentResume } = req.body;
   // console.log(req.body);
@@ -304,5 +385,6 @@ router.delete('/:id', authenticate, isAdmin, async (req, res) => {
     res.status(500).json({ error: 'Failed to delete user' });
   }
 });
+
 
 module.exports = router;
