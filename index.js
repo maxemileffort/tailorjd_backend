@@ -14,6 +14,7 @@ const creditsRoutes = require('./routes/credits'); // Only monitors credit balan
 const createCheckoutSession = require('./routes/checkout'); // checkouts and sessions related to checkouts
 const contactRoutes = require('./routes/contact');
 const articleRoutes = require('./routes/article'); // Import article routes
+const googleDriveRoutes = require('./routes/googleDrive'); // Import Google Drive routes
 
 const sanitizeInput = require('./middleware/sanitizeInput');
 
@@ -71,6 +72,7 @@ app.use('/api/credits', creditsRoutes); // Handles credits logic
 app.use('/api/checkouts', createCheckoutSession); // only checkouts
 app.use('/api/contact', contactRoutes); // Handles contact form submisions
 app.use('/api/articles', articleRoutes); // for rendering blog articles
+app.use('/api/google-drive', googleDriveRoutes); // Google Drive related routes
 
 // Error handling middleware
 app.use((err, req, res, next) => {

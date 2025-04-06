@@ -3,10 +3,39 @@ const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const nodemailer = require('nodemailer');
-const { authenticate } = require('../middleware/auth'); 
+const { google } = require('googleapis');
+const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 const prisma = new PrismaClient();
+
+// --- Google OAuth Configuration ---
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET_KEY; // Ensure this matches your .env variable name
+let GOOGLE_REDIRECT_URI; 
+if(process.env.PROD==="true"){
+    GOOGLE_REDIRECT_URI = (process.env.GOOGLE_PROD_REDIRECT_URI);
+} else {
+    GOOGLE_REDIRECT_URI = (process.env.GOOGLE_TEST_REDIRECT_URI);
+}
+
+if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+  console.error("Google OAuth credentials are not set in environment variables.");
+  // Optionally, throw an error or disable Google routes if credentials are missing
+}
+
+const oauth2Client = new google.auth.OAuth2(
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  GOOGLE_REDIRECT_URI
+);
+
+const scopes = [
+  'https://www.googleapis.com/auth/drive.readonly', // Read-only access to Drive files
+  'https://www.googleapis.com/auth/userinfo.email', // Get user's email (optional, but can be useful)
+  'https://www.googleapis.com/auth/userinfo.profile' // Get user's profile info (optional)
+];
+// --- End Google OAuth Configuration ---
 
 // Login
 router.post('/login', async (req, res) => {
@@ -220,5 +249,92 @@ router.post('/reset/:token', async (req, res) => {
   
   res.send('Password has been reset successfully.');
 });
+
+
+// --- Google OAuth Routes ---
+
+// NEW Route: Get the Google Auth URL (Authenticated)
+router.get('/google/get-auth-url', authenticate, (req, res) => {
+  // Generate the URL that asks permissions for the defined scopes
+   const authorizeUrl = oauth2Client.generateAuthUrl({
+    access_type: 'offline', // Request a refresh token
+    scope: scopes,
+    // Include user ID in state to link tokens back on callback
+    state: req.user.id, // Pass the authenticated user's ID in state
+    prompt: 'consent' // Force consent screen to ensure refresh token is granted, if needed
+  });
+  // Return the URL to the frontend
+  res.json({ authorizeUrl });
+});
+
+
+// Callback route that Google redirects to after user consent
+// This route does NOT need the 'authenticate' middleware because it relies
+// on the 'code' and 'state' parameters from Google's redirect.
+router.get('/google/callback', async (req, res) => {
+  const { code, state: userId } = req.query; // Get code and user ID from state
+
+  if (!code || !userId) {
+    console.error('Google OAuth callback missing code or state (userId).');
+    // Redirect to frontend with error
+    return res.redirect(`${process.env.FRONTEND_URL}/dashboard?tab=profile&google_auth=error&message=MissingCodeOrState`);
+  }
+
+  try {
+    // Exchange authorization code for tokens
+    const { tokens } = await oauth2Client.getToken(code);
+    const { access_token, refresh_token, expiry_date } = tokens;
+
+    if (!access_token) {
+        console.error('Failed to retrieve access token from Google.');
+        return res.redirect(`${process.env.FRONTEND_URL}/user-dashboard?tab=profile&google_auth=error&message=NoAccessToken`);
+    }
+
+    // Store tokens securely in the database associated with the user
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        googleAccessToken: access_token,
+        // Only store refresh_token if it's provided (usually only on first consent)
+        ...(refresh_token && { googleRefreshToken: refresh_token }),
+        googleTokenExpiry: expiry_date ? new Date(expiry_date) : null,
+      },
+    });
+
+    // Redirect back to the frontend profile page with success indicator
+    res.redirect(`${process.env.FRONTEND_URL}/user-dashboard?tab=profile&google_auth=success`);
+
+  } catch (error) {
+    console.error('Error exchanging Google OAuth code for tokens:', error.message);
+    // Redirect to frontend with error
+    res.redirect(`${process.env.FRONTEND_URL}/user-dashboard?tab=profile&google_auth=error&message=TokenExchangeFailed`);
+  }
+});
+
+// NEW Route: Check if user is currently authenticated with Google
+router.get('/google/status', authenticate, async (req, res) => {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: req.user.id },
+            select: { googleAccessToken: true, googleTokenExpiry: true } // Select token and expiry
+        });
+
+        // Basic check: Does a token exist?
+        // More robust check could involve expiry date or even trying a lightweight API call
+        const isConnected = !!user?.googleAccessToken;
+        // Optional: Check expiry (consider a buffer)
+        // const isTokenValid = isConnected && (!user.googleTokenExpiry || user.googleTokenExpiry > new Date());
+
+        res.json({ isConnected: isConnected });
+
+    } catch (error) {
+        console.error('Error checking Google auth status:', error.message);
+        res.status(500).json({ error: 'Failed to check Google connection status.' });
+    }
+});
+
+
+// --- End Google OAuth Routes ---
+
 
 module.exports = router;

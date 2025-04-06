@@ -23,6 +23,9 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   deletedAt        DateTime? // New: For soft deletion
+  googleAccessToken  String?   // For Google Drive integration
+  googleRefreshToken String?   // For Google Drive integration
+  googleTokenExpiry  DateTime? // For Google Drive integration
 
   // Relations
   docs         Docs[]
