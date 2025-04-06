@@ -72,35 +72,48 @@ router.post('/create-checkout-session', async (req, res) => {
         where: { id: userId },
       });
       stripeCustomerId = user?.stripeCustomerId;
-    }
 
-    if (!stripeCustomerId) {
-      // Search for an existing Stripe customer with the email
-      const existingCustomers = await stripe.customers.list({
-        email,
-        limit: 1,
-      });
-
-      if (existingCustomers.data.length > 0) {
-        stripeCustomerId = existingCustomers.data[0].id;
-      } else {
-        // Create a new Stripe customer
-        const customer = await stripe.customers.create({
-          email,
-          metadata: {
-            userId: user?.id || null, // Associate with user ID if available
-          },
-        });
-        stripeCustomerId = customer.id;
-
-        // Save the Stripe customer ID to database if userId is available
-        if (userId) {
+      // If user exists but doesn't have stripeCustomerId in DB, try finding/creating in Stripe
+      if (user && !stripeCustomerId) {
+        const existingCustomers = await stripe.customers.list({ email, limit: 1 });
+        if (existingCustomers.data.length > 0) {
+          // Found existing customer by email
+          stripeCustomerId = existingCustomers.data[0].id;
+          // Update DB record immediately
+          await prisma.user.update({
+            where: { id: userId },
+            data: { stripeCustomerId },
+          });
+        } else {
+          // No customer found by email, create a new one
+          const customer = await stripe.customers.create({
+            email,
+            metadata: { userId: userId }, // Associate with user ID
+          });
+          stripeCustomerId = customer.id;
+          // Update DB record immediately
           await prisma.user.update({
             where: { id: userId },
             data: { stripeCustomerId },
           });
         }
       }
+    } else if (!userId) {
+      // Handle guest checkout or case where userId is not provided
+      const existingCustomers = await stripe.customers.list({ email, limit: 1 });
+      if (existingCustomers.data.length > 0) {
+        stripeCustomerId = existingCustomers.data[0].id;
+      } else {
+        // Create a new Stripe customer for guest
+        const customer = await stripe.customers.create({ email });
+        stripeCustomerId = customer.id;
+        // Note: Cannot associate with a userId here as it's not provided
+      }
+    }
+    // If after all checks, stripeCustomerId is still missing, something went wrong.
+    if (!stripeCustomerId) {
+        console.error("Failed to determine Stripe Customer ID for email:", email, "userId:", userId);
+        return res.status(500).json({ error: 'Could not determine Stripe customer ID.' });
     }
 
     const sessionCreatePayload = {

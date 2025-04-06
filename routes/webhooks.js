@@ -19,6 +19,39 @@ const stripe = require('stripe')(stripeKey);
 const router = express.Router();
 const prisma = new PrismaClient();
 
+// Helper function to find user by Stripe data, prioritizing Stripe Customer ID
+async function findUserByStripeData(stripeCustomerId, customerEmail) {
+  let user = null;
+
+  // 1. Try finding user by Stripe Customer ID
+  if (stripeCustomerId) {
+    user = await prisma.user.findFirst({
+      where: { stripeCustomerId: stripeCustomerId },
+    });
+  }
+
+  // 2. If not found by Stripe ID, try finding by email
+  if (!user && customerEmail) {
+    user = await prisma.user.findUnique({
+      where: { email: customerEmail },
+    });
+    // If found by email, ensure their Stripe Customer ID is updated in DB
+    if (user && stripeCustomerId && user.stripeCustomerId !== stripeCustomerId) {
+      console.log(`Updating Stripe Customer ID for user ${user.id} found by email.`);
+      try {
+        await updateCustId(user.id, stripeCustomerId);
+        // Re-fetch user data to ensure consistency, though updateCustId might return it
+        user = await prisma.user.findUnique({ where: { id: user.id } });
+      } catch (error) {
+         console.error(`Error updating stripeCustomerId for user ${user.id} found by email:`, error);
+         // Decide if this error should prevent further processing
+      }
+    }
+  }
+  return user;
+}
+
+
 router.post('/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
   
@@ -60,19 +93,16 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
 // Event Handlers
 async function handleChargeSucceeded(charge) {
   
-  let user;
-  
+  const stripeCustomerId = charge.customer;
+  const invoice = await stripe.invoices.retrieve(charge.invoice); // Still need invoice for details & email
+  const customerEmail = invoice.customer_email;
+
   try {
-    // Use charge to pull invoice information.
-    const invoice = await stripe.invoices.retrieve(charge.invoice);
-    
-    // From the invoice, pull product & customer information.
-    user = await prisma.user.findUnique({
-      where: { email: invoice.customer_email },
-    });
-    
-    if (!user) {
-      console.error('User not found for customer ID:', invoice.customer_email);
+    let user = await findUserByStripeData(stripeCustomerId, customerEmail);
+
+    // If user still not found after lookup, create a new one
+    if (!user && customerEmail && stripeCustomerId) {
+      console.log('User not found by Stripe ID or email. Creating new user for email:', customerEmail);
       const DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD
       // Hash the default password
       const hashedPassword = await bcrypt.hash(DEFAULT_PASSWORD, 10);
@@ -235,16 +265,32 @@ async function handleCheckoutSessionCompleted(session) {
     customer_email: session.customer_details.email || 'N/A',
     products: products // Include detailed product info
   };
-  
+  const stripeCustomerId = session.customer;
+  const customerEmail = session.customer_details?.email;
+
   try {
-    // Find the user based on the customer ID
-    user = await prisma.user.findUnique({
-      where: { email: sessionDetails.customer_email },
-    });
-    
-    const amount = sessionDetails.creditIncrement;
-    const qty = sessionDetails.products[0].quantity;
-    const finalAmt = amount * qty;
+    const user = await findUserByStripeData(stripeCustomerId, customerEmail);
+
+    // Ensure user is found before proceeding
+    if (!user) {
+      console.error(`User not found for checkout session ${session.id} (Customer ID: ${stripeCustomerId}, Email: ${customerEmail})`);
+      // Log error and exit or handle as appropriate (e.g., maybe create user if it's a first-time purchase scenario not caught elsewhere)
+       await prisma.activityLog.create({
+         data: {
+           action: 'Checkout Session - Error: User Not Found',
+           activityType: 'ERROR',
+           details: { sessionId: session.id, customerId: stripeCustomerId, email: customerEmail },
+         },
+       });
+      return; // Exit if user cannot be identified
+    }
+
+    // Credits are usually handled by charge.succeeded or invoice.payment_succeeded
+    // This handler might just be for logging or specific post-checkout actions.
+    // TODO: Confirm if the credit add is being double counted.
+    // const amount = sessionDetails.creditIncrement; // Check if credit logic is needed here
+    // const qty = sessionDetails.products[0].quantity;
+    // const finalAmt = amount * qty; // Commented out as amount and qty are commented out, and credit update logic is likely handled elsewhere.
     // await updateUserCredits(user.id, finalAmt, 'increment');
     await updateCustId(user.id, invoice.customer);
     
@@ -279,18 +325,23 @@ async function handleCheckoutSessionCompleted(session) {
 
 async function handlePaymentSucceeded(invoice) {
   
-  let user;
-  
+  const stripeCustomerId = invoice.customer;
+  const customerEmail = invoice.customer_email;
+
   try {
-    
-    // From the invoice, pull product & customer information.
-    user = await prisma.user.findUnique({
-      where: { email: invoice.customer_email },
-    });
-    
+    const user = await findUserByStripeData(stripeCustomerId, customerEmail);
+
+     // Ensure user is found before proceeding
     if (!user) {
-      console.error('User not found for customer ID:', invoice.customer_email);
-      return;
+      console.error(`User not found for invoice ${invoice.id} (Customer ID: ${stripeCustomerId}, Email: ${customerEmail})`);
+       await prisma.activityLog.create({
+         data: {
+           action: 'Payment Success - Error: User Not Found',
+           activityType: 'ERROR',
+           details: { invoiceId: invoice.id, customerId: stripeCustomerId, email: customerEmail },
+         },
+       });
+      return; // Exit if user cannot be identified
     }
     
     const products = await Promise.all(invoice.lines.data.map(async (lineItem) => {
@@ -367,17 +418,17 @@ async function handlePaymentFailed(invoice) {
   console.log('Payment failed:', invoice.id);
   
   
-  let user;
-  
-  
+  const stripeCustomerId = invoice.customer;
+  const customerEmail = invoice.customer_email;
+
   try {
-    // Find the user based on the customer email
-    user = await prisma.user.findUnique({
-      where: { email: invoice.customer_email },
-    });
-    
+    // Use the helper function to find the user.
+    // Note: We don't update stripeCustomerId on failure, so the helper's update logic is less critical here, but still good for consistency.
+    const user = await findUserByStripeData(stripeCustomerId, customerEmail);
+
+    // Now proceed with logging based on whether the user was found
     if (user) {
-      // Log the event in the ActivityLog table
+      // Log the event in the ActivityLog table for the found user
       await prisma.activityLog.create({
         data: {
           userId: user.id,
